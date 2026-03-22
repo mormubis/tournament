@@ -77,8 +77,8 @@ pnpm lint && pnpm test && pnpm build
 - `toJSON()` / `fromJSON()` enable serialization. The pairing system function
   must be re-provided when restoring from JSON since functions aren't
   serializable.
-- Baku Acceleration creates ephemeral virtual-point games that are passed to
-  the pairing system but never stored in the tournament's game history.
+- Baku Acceleration creates ephemeral virtual-point games that are passed to the
+  pairing system but never stored in the tournament's game history.
 - All interface fields sorted alphabetically (`sort-keys` is an ESLint error).
 - Always use `.js` extensions on relative imports (NodeNext resolution).
 

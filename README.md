@@ -13,8 +13,8 @@ dependencies.
 
 The pairing system is injected as a function parameter. Bring your own from
 [`@echecs/swiss`](https://www.npmjs.com/package/@echecs/swiss),
-[`@echecs/round-robin`](https://www.npmjs.com/package/@echecs/round-robin), or
-a custom implementation.
+[`@echecs/round-robin`](https://www.npmjs.com/package/@echecs/round-robin), or a
+custom implementation.
 
 ## Installation
 
@@ -92,9 +92,9 @@ Creates a new tournament.
 ```typescript
 interface TournamentOptions {
   acceleration?: AccelerationMethod; // e.g. bakuAcceleration()
-  pairingSystem: PairingSystem;      // e.g. dutch, roundRobin
-  players: Player[];                 // all participants
-  rounds: number;                    // total number of rounds
+  pairingSystem: PairingSystem; // e.g. dutch, roundRobin
+  players: Player[]; // all participants
+  rounds: number; // total number of rounds
 }
 ```
 
@@ -117,7 +117,7 @@ automatically — pass the game without it.
 tournament.recordResult({
   whiteId: 'alice',
   blackId: 'bob',
-  result: 1,     // 1 = white wins, 0.5 = draw, 0 = black wins
+  result: 1, // 1 = white wins, 0.5 = draw, 0 = black wins
 });
 ```
 
@@ -201,10 +201,10 @@ type PairingSystem = (
 ) => PairingResult;
 ```
 
-| Package | Functions | FIDE Rules |
-|---------|-----------|------------|
-| [`@echecs/swiss`](https://www.npmjs.com/package/@echecs/swiss) | `dutch`, `dubov`, `burstein`, `lim`, `doubleSwiss`, `swissTeam` | C.04.3, C.04.4.1-3, C.04.5, C.04.6 |
-| [`@echecs/round-robin`](https://www.npmjs.com/package/@echecs/round-robin) | `roundRobin` | C.05 |
+| Package                                                                    | Functions                                                       | FIDE Rules                         |
+| -------------------------------------------------------------------------- | --------------------------------------------------------------- | ---------------------------------- |
+| [`@echecs/swiss`](https://www.npmjs.com/package/@echecs/swiss)             | `dutch`, `dubov`, `burstein`, `lim`, `doubleSwiss`, `swissTeam` | C.04.3, C.04.4.1-3, C.04.5, C.04.6 |
+| [`@echecs/round-robin`](https://www.npmjs.com/package/@echecs/round-robin) | `roundRobin`                                                    | C.05                               |
 
 ## Types
 
