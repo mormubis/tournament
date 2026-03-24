@@ -1,3 +1,5 @@
+type GameKind = 'forfeit' | 'normal' | 'rated' | 'unrated';
+
 type Result = 0 | 0.5 | 1;
 
 interface AccelerationMethod {
@@ -5,19 +7,19 @@ interface AccelerationMethod {
 }
 
 interface Bye {
-  playerId: string;
+  player: string;
 }
 
 interface Game {
-  blackId: string;
+  black: string;
+  kind?: GameKind;
   result: Result;
-  round: number;
-  whiteId: string;
+  white: string;
 }
 
 interface Pairing {
-  blackId: string;
-  whiteId: string;
+  black: string;
+  white: string;
 }
 
 interface PairingResult {
@@ -31,7 +33,7 @@ interface Player {
 }
 
 interface Standing {
-  playerId: string;
+  player: string;
   rank: number;
   score: number;
   tiebreaks: number[];
@@ -46,24 +48,25 @@ interface TournamentOptions {
 
 interface TournamentSnapshot {
   currentRound: number;
-  games: Game[];
+  games: Game[][];
   players: Player[];
   roundPairings: Record<string, PairingResult>;
   rounds: number;
 }
 
-type PairingSystem = (
-  players: Player[],
-  games: Game[],
-  round: number,
-) => PairingResult;
+type PairingSystem = (players: Player[], games: Game[][]) => PairingResult;
 
-type Tiebreak = (playerId: string, players: Player[], games: Game[]) => number;
+type Tiebreak = (
+  playerId: string,
+  games: Game[][],
+  players: Player[],
+) => number;
 
 export type {
   AccelerationMethod,
   Bye,
   Game,
+  GameKind,
   Pairing,
   PairingResult,
   PairingSystem,

@@ -4,6 +4,7 @@ export type {
   AccelerationMethod,
   Bye,
   Game,
+  GameKind,
   Pairing,
   PairingResult,
   PairingSystem,

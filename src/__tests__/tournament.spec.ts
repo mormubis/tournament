@@ -20,12 +20,12 @@ const mockPairingSystem: PairingSystem = (players) => {
   const pairings: Pairing[] = [];
   for (let index = 0; index < players.length - 1; index += 2) {
     pairings.push({
-      blackId: players[index + 1]!.id,
-      whiteId: players[index]!.id,
+      black: players[index + 1]!.id,
+      white: players[index]!.id,
     });
   }
   const byes: Bye[] =
-    players.length % 2 === 0 ? [] : [{ playerId: players.at(-1)!.id }];
+    players.length % 2 === 0 ? [] : [{ player: players.at(-1)!.id }];
   return { byes, pairings };
 };
 
@@ -144,9 +144,9 @@ describe('Tournament', () => {
       const result = t.pairRound();
       for (const pairing of result.pairings) {
         t.recordResult({
-          blackId: pairing.blackId,
+          black: pairing.black,
           result: 1,
-          whiteId: pairing.whiteId,
+          white: pairing.white,
         });
       }
       expect(() => t.pairRound()).toThrow(RangeError);
@@ -172,19 +172,8 @@ describe('Tournament', () => {
         rounds: 3,
       });
       t.pairRound();
-      t.recordResult({ blackId: 'b', result: 1, whiteId: 'a' });
-      expect(t.games).toHaveLength(1);
-    });
-
-    it('sets round field automatically', () => {
-      const t = new Tournament({
-        pairingSystem: mockPairingSystem,
-        players,
-        rounds: 3,
-      });
-      t.pairRound();
-      t.recordResult({ blackId: 'b', result: 1, whiteId: 'a' });
-      expect(t.games[0]?.round).toBe(1);
+      t.recordResult({ black: 'b', result: 1, white: 'a' });
+      expect(t.games[0]).toHaveLength(1);
     });
 
     it('throws RangeError for a non-existent pairing', () => {
@@ -195,7 +184,7 @@ describe('Tournament', () => {
       });
       t.pairRound();
       expect(() =>
-        t.recordResult({ blackId: 'z', result: 1, whiteId: 'x' }),
+        t.recordResult({ black: 'z', result: 1, white: 'x' }),
       ).toThrow(RangeError);
     });
 
@@ -206,7 +195,7 @@ describe('Tournament', () => {
         rounds: 3,
       });
       expect(() =>
-        t.recordResult({ blackId: 'b', result: 1, whiteId: 'a' }),
+        t.recordResult({ black: 'b', result: 1, white: 'a' }),
       ).toThrow(RangeError);
     });
 
@@ -219,15 +208,15 @@ describe('Tournament', () => {
 
       const r1 = t.pairRound();
       for (const p of r1.pairings) {
-        t.recordResult({ blackId: p.blackId, result: 0.5, whiteId: p.whiteId });
+        t.recordResult({ black: p.black, result: 0.5, white: p.white });
       }
 
       const r2 = t.pairRound();
       for (const p of r2.pairings) {
-        t.recordResult({ blackId: p.blackId, result: 0.5, whiteId: p.whiteId });
+        t.recordResult({ black: p.black, result: 0.5, white: p.white });
       }
 
-      expect(t.games).toHaveLength(4);
+      expect(t.games.flat()).toHaveLength(4);
     });
   });
 
@@ -252,11 +241,11 @@ describe('Tournament', () => {
       const r1 = t.pairRound();
       // pairings: a vs b, c vs d — white wins each
       for (const p of r1.pairings) {
-        t.recordResult({ blackId: p.blackId, result: 1, whiteId: p.whiteId });
+        t.recordResult({ black: p.black, result: 1, white: p.white });
       }
       const s = t.standings();
-      const a = s.find((x) => x.playerId === 'a')!;
-      const b = s.find((x) => x.playerId === 'b')!;
+      const a = s.find((x) => x.player === 'a')!;
+      const b = s.find((x) => x.player === 'b')!;
       expect(a.score).toBe(1);
       expect(b.score).toBe(0);
     });
@@ -269,7 +258,7 @@ describe('Tournament', () => {
       });
       const r1 = t.pairRound();
       for (const p of r1.pairings) {
-        t.recordResult({ blackId: p.blackId, result: 1, whiteId: p.whiteId });
+        t.recordResult({ black: p.black, result: 1, white: p.white });
       }
       const s = t.standings();
       expect(s[0]!.rank).toBe(1);
@@ -283,10 +272,10 @@ describe('Tournament', () => {
         rounds: 1,
       });
       t.pairRound();
-      t.recordResult({ blackId: 'b', result: 0.5, whiteId: 'a' });
+      t.recordResult({ black: 'b', result: 0.5, white: 'a' });
       // Both have score 0.5; tiebreak returns higher value for 'a'
       const s = t.standings([tiebreakFavorA]);
-      expect(s[0]!.playerId).toBe('a');
+      expect(s[0]!.player).toBe('a');
       expect(s[0]!.rank).toBe(1);
       expect(s[1]!.rank).toBe(2);
     });
@@ -298,7 +287,7 @@ describe('Tournament', () => {
         rounds: 1,
       });
       t.pairRound();
-      t.recordResult({ blackId: 'b', result: 0.5, whiteId: 'a' });
+      t.recordResult({ black: 'b', result: 0.5, white: 'a' });
       const s = t.standings(); // no tiebreaks → tied
       expect(s[0]!.rank).toBe(1);
       expect(s[1]!.rank).toBe(1);
@@ -321,7 +310,7 @@ describe('Tournament', () => {
         rounds: 1,
       });
       t.pairRound();
-      t.recordResult({ blackId: 'b', result: 1, whiteId: 'a' });
+      t.recordResult({ black: 'b', result: 1, white: 'a' });
       const s = t.standings([tiebreakConstant]);
       expect(s[0]!.tiebreaks).toEqual([42]);
     });
@@ -336,11 +325,11 @@ describe('Tournament', () => {
       });
       const r1 = t.pairRound();
       for (const p of r1.pairings) {
-        t.recordResult({ blackId: p.blackId, result: 1, whiteId: p.whiteId });
+        t.recordResult({ black: p.black, result: 1, white: p.white });
       }
       const json = t.toJSON();
       expect(json.currentRound).toBe(1);
-      expect(json.games).toHaveLength(2);
+      expect(json.games.flat()).toHaveLength(2);
       expect(json.rounds).toBe(2);
       expect(structuredClone(json)).toEqual(json);
     });
@@ -353,7 +342,7 @@ describe('Tournament', () => {
       });
       const r1 = t.pairRound();
       for (const p of r1.pairings) {
-        t.recordResult({ blackId: p.blackId, result: 1, whiteId: p.whiteId });
+        t.recordResult({ black: p.black, result: 1, white: p.white });
       }
       const json = t.toJSON();
       const restored = Tournament.fromJSON(json, mockPairingSystem);
@@ -371,7 +360,7 @@ describe('Tournament', () => {
       });
       const r1 = t.pairRound();
       for (const p of r1.pairings) {
-        t.recordResult({ blackId: p.blackId, result: 1, whiteId: p.whiteId });
+        t.recordResult({ black: p.black, result: 1, white: p.white });
       }
       const restored = Tournament.fromJSON(t.toJSON(), mockPairingSystem);
       expect(() => restored.pairRound()).not.toThrow();
@@ -386,7 +375,7 @@ describe('Tournament', () => {
       });
       const r1 = t.pairRound();
       for (const p of r1.pairings) {
-        t.recordResult({ blackId: p.blackId, result: 0.5, whiteId: p.whiteId });
+        t.recordResult({ black: p.black, result: 0.5, white: p.white });
       }
       const snap1 = t.toJSON();
       const restored = Tournament.fromJSON(snap1, mockPairingSystem);
@@ -406,7 +395,7 @@ describe('Tournament', () => {
       // gaSize = 2 * ceil(4/4) = 2 → GA = [a, b], GB = [c, d]
       const acceleration = bakuAcceleration(acceleratedPlayers);
 
-      let capturedGames: Game[] = [];
+      let capturedGames: Game[][] = [];
       const spyPairingSystem: PairingSystem = (
         spyPlayers,
         games,
@@ -415,8 +404,8 @@ describe('Tournament', () => {
         const pairings: Pairing[] = [];
         for (let index = 0; index < spyPlayers.length - 1; index += 2) {
           pairings.push({
-            blackId: spyPlayers[index + 1]!.id,
-            whiteId: spyPlayers[index]!.id,
+            black: spyPlayers[index + 1]!.id,
+            white: spyPlayers[index]!.id,
           });
         }
         return { byes: [], pairings };
@@ -431,22 +420,21 @@ describe('Tournament', () => {
 
       t.pairRound();
 
-      // Virtual games should be present in captured pairing input
-      const virtualGames = capturedGames.filter((g) => g.round === 0);
+      // Virtual games are prepended as extra round (index 0)
+      const virtualGames = capturedGames[0] ?? [];
       expect(virtualGames.length).toBeGreaterThan(0);
 
       // GA players (a, b) each have a virtual game with 1 virtual point (round 1 of 9)
-      const virtualForA = virtualGames.find((g) => g.whiteId === 'a');
+      const virtualForA = virtualGames.find((g) => g.white === 'a');
       expect(virtualForA).toBeDefined();
       expect(virtualForA?.result).toBe(1);
 
       // GB players (c, d) have no virtual games
-      expect(virtualGames.some((g) => g.whiteId === 'c')).toBe(false);
-      expect(virtualGames.some((g) => g.whiteId === 'd')).toBe(false);
+      expect(virtualGames.some((g) => g.white === 'c')).toBe(false);
+      expect(virtualGames.some((g) => g.white === 'd')).toBe(false);
 
-      // tournament.games does NOT contain virtual games
-      expect(t.games.every((g) => g.round !== 0)).toBe(true);
-      expect(t.games).toHaveLength(0);
+      // tournament.games does NOT contain virtual games — round array is empty
+      expect(t.games.flat()).toHaveLength(0);
     });
 
     it('works end-to-end with acceleration', () => {
@@ -469,7 +457,7 @@ describe('Tournament', () => {
       for (let round = 0; round < 3; round++) {
         const result = t.pairRound();
         for (const p of result.pairings) {
-          t.recordResult({ blackId: p.blackId, result: 1, whiteId: p.whiteId });
+          t.recordResult({ black: p.black, result: 1, white: p.white });
         }
       }
 
@@ -484,8 +472,7 @@ describe('Tournament', () => {
       expect(totalScore).toBe(6);
 
       // Games stored are only real games (no virtual)
-      expect(t.games).toHaveLength(6);
-      expect(t.games.every((g) => g.round > 0)).toBe(true);
+      expect(t.games.flat()).toHaveLength(6);
     });
   });
 
@@ -504,7 +491,7 @@ describe('Tournament', () => {
       expect(t.isComplete).toBe(false);
 
       for (const p of r1.pairings) {
-        t.recordResult({ blackId: p.blackId, result: 1, whiteId: p.whiteId });
+        t.recordResult({ black: p.black, result: 1, white: p.white });
       }
 
       expect(t.isComplete).toBe(true);
@@ -519,13 +506,13 @@ describe('Tournament', () => {
 
       const r1 = t.pairRound();
       for (const p of r1.pairings) {
-        t.recordResult({ blackId: p.blackId, result: 1, whiteId: p.whiteId });
+        t.recordResult({ black: p.black, result: 1, white: p.white });
       }
       expect(t.isComplete).toBe(false);
 
       const r2 = t.pairRound();
       for (const p of r2.pairings) {
-        t.recordResult({ blackId: p.blackId, result: 1, whiteId: p.whiteId });
+        t.recordResult({ black: p.black, result: 1, white: p.white });
       }
 
       expect(t.currentRound).toBe(2);

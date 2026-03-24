@@ -1,6 +1,7 @@
 import type {
   AccelerationMethod,
   Game,
+  GameKind,
   PairingResult,
   PairingSystem,
   Player,
@@ -14,7 +15,7 @@ import type {
 class Tournament {
   readonly #acceleration?: AccelerationMethod;
   #currentRound = 0;
-  #games: Game[] = [];
+  #games: Game[][] = [];
   readonly #pairingSystem: PairingSystem;
   readonly #players: Player[];
   #roundPairings = new Map<number, PairingResult>();
@@ -37,8 +38,8 @@ class Tournament {
     return this.#currentRound;
   }
 
-  get games(): readonly Game[] {
-    return [...this.#games];
+  get games(): readonly (readonly Game[])[] {
+    return this.#games.map((r) => [...r]);
   }
 
   get isComplete(): boolean {
@@ -68,21 +69,24 @@ class Tournament {
 
     this.#currentRound++;
 
-    let games = [...this.#games];
+    let games: Game[][] = [...this.#games];
     if (this.#acceleration) {
-      games = [...games, ...this.#buildVirtualGames(this.#currentRound)];
+      const virtualGames = this.#buildVirtualGames(this.#currentRound);
+      games = [virtualGames, ...games];
     }
 
-    const result = this.#pairingSystem(
-      this.#players,
-      games,
-      this.#currentRound,
-    );
+    const result = this.#pairingSystem(this.#players, games);
     this.#roundPairings.set(this.#currentRound, result);
+    this.#games.push([]);
     return result;
   }
 
-  recordResult(game: Omit<Game, 'round'>): void {
+  recordResult(game: {
+    black: string;
+    kind?: GameKind;
+    result: Result;
+    white: string;
+  }): void {
     if (this.#currentRound === 0) {
       throw new RangeError('no round has been paired yet');
     }
@@ -94,35 +98,38 @@ class Tournament {
 
     const validPairing = roundPairings.pairings.some(
       (p) =>
-        (p.whiteId === game.whiteId && p.blackId === game.blackId) ||
-        (p.whiteId === game.blackId && p.blackId === game.whiteId),
+        (p.white === game.white && p.black === game.black) ||
+        (p.white === game.black && p.black === game.white),
     );
     if (!validPairing) {
       throw new RangeError(
-        `no pairing found for ${game.whiteId} vs ${game.blackId}`,
+        `no pairing found for ${game.white} vs ${game.black}`,
       );
     }
 
-    this.#games.push({ ...game, round: this.#currentRound });
+    const currentRoundGames = this.#games[this.#currentRound - 1];
+    if (currentRoundGames) {
+      currentRoundGames.push(game);
+    }
   }
 
   standings(tiebreaks: Tiebreak[] = []): Standing[] {
     const results = this.#players.map((player) => {
       let score = 0;
-      for (const g of this.#games) {
-        if (g.whiteId === player.id) {
+      for (const g of this.#games.flat()) {
+        if (g.white === player.id) {
           score += g.result;
-        } else if (g.blackId === player.id) {
+        } else if (g.black === player.id) {
           score += 1 - g.result;
         }
       }
 
       const tiebreakValues = tiebreaks.map((tb) =>
-        tb(player.id, this.#players, this.#games),
+        tb(player.id, this.#games, this.#players),
       );
 
       return {
-        playerId: player.id,
+        player: player.id,
         rank: 0,
         score,
         tiebreaks: tiebreakValues,
@@ -170,7 +177,7 @@ class Tournament {
     }
     return {
       currentRound: this.#currentRound,
-      games: [...this.#games],
+      games: this.#games.map((r) => [...r]),
       players: [...this.#players],
       roundPairings,
       rounds: this.#rounds,
@@ -189,7 +196,7 @@ class Tournament {
       rounds: snapshot.rounds,
     });
     tournament.#currentRound = snapshot.currentRound;
-    tournament.#games = [...snapshot.games];
+    tournament.#games = snapshot.games.map((r) => [...r]);
     for (const [round, pairings] of Object.entries(snapshot.roundPairings)) {
       tournament.#roundPairings.set(Number(round), pairings);
     }
@@ -205,10 +212,9 @@ class Tournament {
       const vp = this.#acceleration.virtualPoints(player, round, this.#rounds);
       if (vp > 0) {
         virtualGames.push({
-          blackId: '',
+          black: '',
           result: vp as Result,
-          round: 0,
-          whiteId: player.id,
+          white: player.id,
         });
       }
     }
@@ -220,8 +226,7 @@ class Tournament {
     if (!pairings) {
       return false;
     }
-    const roundGames = this.#games.filter((g) => g.round === round);
-    return roundGames.length >= pairings.pairings.length;
+    return (this.#games[round - 1]?.length ?? 0) >= pairings.pairings.length;
   }
 }
 
