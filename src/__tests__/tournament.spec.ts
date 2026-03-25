@@ -331,7 +331,8 @@ describe('Tournament', () => {
       expect(json.currentRound).toBe(1);
       expect(json.games.flat()).toHaveLength(2);
       expect(json.rounds).toBe(2);
-      expect(structuredClone(json)).toEqual(json);
+      // eslint-disable-next-line unicorn/prefer-structured-clone
+      expect(JSON.parse(JSON.stringify(json))).toEqual(json);
     });
 
     it('fromJSON restores tournament state', () => {

@@ -11,9 +11,6 @@ importers:
       '@eslint/js':
         specifier: ^10.0.1
         version: 10.0.1(eslint@10.1.0)
-      '@types/node':
-        specifier: ^25.5.0
-        version: 25.5.0
       '@typescript-eslint/parser':
         specifier: ^8.57.0
         version: 8.57.1(eslint@10.1.0)(typescript@6.0.2)
@@ -1804,6 +1801,7 @@ snapshots:
   '@types/node@25.5.0':
     dependencies:
       undici-types: 7.18.2
+    optional: true
 
   '@typescript-eslint/eslint-plugin@8.57.1(@typescript-eslint/parser@8.57.1(eslint@10.1.0)(typescript@6.0.2))(eslint@10.1.0)(typescript@6.0.2)':
     dependencies:
@@ -2751,7 +2749,8 @@ snapshots:
       '@quansync/fs': 1.0.0
       quansync: 1.0.0
 
-  undici-types@7.18.2: {}
+  undici-types@7.18.2:
+    optional: true
 
   unrs-resolver@1.11.1:
     dependencies:
