@@ -4,9 +4,6 @@ Last updated: 2026-04-04
 
 ## Pending
 
-- [ ] **Publish v3.0.0** — `updateResult`, `clearResult`, and `GameKind` support
-      are implemented but not yet released. Kx8ble is blocked on this release
-      for result editing, forfeit distinction, and result clearing.
 - [ ] **Tiebreak IDs in `TournamentSnapshot`** — add optional
       `tiebreaks?: string[]` so tiebreak configuration survives serialization.
       See `docs/plans/TODO-tiebreak-snapshot.md`.

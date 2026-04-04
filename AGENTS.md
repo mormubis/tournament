@@ -93,7 +93,13 @@ The `Game` type carries an optional `kind?: GameKind` field to classify unplayed
 rounds:
 
 ```typescript
-type GameKind = 'forfeit' | 'normal' | 'rated' | 'unrated';
+type GameKind =
+  | 'forfeit-loss'
+  | 'forfeit-win'
+  | 'full-bye'
+  | 'half-bye'
+  | 'pairing-bye'
+  | 'zero-bye';
 
 interface Game {
   black: string;

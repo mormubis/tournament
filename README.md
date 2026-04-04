@@ -26,7 +26,7 @@ npm install @echecs/tournament
 
 ```typescript
 import { Tournament } from '@echecs/tournament';
-import { dutch } from '@echecs/swiss';
+import { pair } from '@echecs/swiss/dutch';
 import type { Game, GameKind, Player, Tiebreak } from '@echecs/tournament';
 
 const players: Player[] = [
@@ -37,7 +37,7 @@ const players: Player[] = [
 ];
 
 const tournament = new Tournament({
-  pairingSystem: dutch,
+  pairingSystem: pair,
   players,
   rounds: 3,
 });
@@ -95,7 +95,7 @@ Creates a new tournament.
 ```typescript
 interface TournamentOptions {
   acceleration?: AccelerationMethod; // e.g. bakuAcceleration(players)
-  pairingSystem: PairingSystem; // e.g. dutch, roundRobin
+  pairingSystem: PairingSystem; // e.g. pair from @echecs/swiss/dutch
   players: Player[]; // all participants
   rounds: number; // total number of rounds
 }
@@ -213,7 +213,7 @@ const snapshot = tournament.toJSON();
 const json = JSON.stringify(snapshot);
 
 // Later...
-const restored = Tournament.fromJSON(JSON.parse(json), dutch);
+const restored = Tournament.fromJSON(JSON.parse(json), pair);
 const nextRound = restored.pairRound();
 ```
 
@@ -232,11 +232,11 @@ face each other earlier.
 
 ```typescript
 import { Tournament, bakuAcceleration } from '@echecs/tournament';
-import { dutch } from '@echecs/swiss';
+import { pair } from '@echecs/swiss/dutch';
 
 const tournament = new Tournament({
   acceleration: bakuAcceleration(players),
-  pairingSystem: dutch,
+  pairingSystem: pair,
   players,
   rounds: 9,
 });
@@ -260,10 +260,18 @@ Any function matching the `PairingSystem` signature works:
 type PairingSystem = (players: Player[], games: Game[][]) => PairingResult;
 ```
 
-| Package                                                                    | Functions                                                       | FIDE Rules                         |
-| -------------------------------------------------------------------------- | --------------------------------------------------------------- | ---------------------------------- |
-| [`@echecs/swiss`](https://www.npmjs.com/package/@echecs/swiss)             | `dutch`, `dubov`, `burstein`, `lim`, `doubleSwiss`, `swissTeam` | C.04.3, C.04.4.1-3, C.04.5, C.04.6 |
-| [`@echecs/round-robin`](https://www.npmjs.com/package/@echecs/round-robin) | `roundRobin`                                                    | C.05                               |
+| Package                                                                    | Subpath                  | FIDE Rules |
+| -------------------------------------------------------------------------- | ------------------------ | ---------- |
+| [`@echecs/swiss`](https://www.npmjs.com/package/@echecs/swiss)             | `@echecs/swiss/dutch`    | C.04.3     |
+|                                                                            | `@echecs/swiss/dubov`    | C.04.4.1   |
+|                                                                            | `@echecs/swiss/burstein` | C.04.4.2   |
+|                                                                            | `@echecs/swiss/lim`      | C.04.4.3   |
+|                                                                            | `@echecs/swiss/double`   | C.04.5     |
+|                                                                            | `@echecs/swiss/team`     | C.04.6     |
+| [`@echecs/round-robin`](https://www.npmjs.com/package/@echecs/round-robin) | `@echecs/round-robin`    | C.05       |
+
+All subpaths export a `pair` function conforming to the `PairingSystem`
+signature.
 
 ## Types
 
