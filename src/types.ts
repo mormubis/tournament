@@ -95,6 +95,8 @@ interface TournamentOptions {
   players: Player[];
   /** Total number of rounds. Must be at least 1. */
   rounds: number;
+  /** Optional ordered list of tiebreak identifiers. Opaque strings preserved through serialization. */
+  tiebreaks?: string[];
 }
 
 /** Serializable snapshot of a tournament's state, returned by {@link Tournament.toJSON}. */
@@ -109,6 +111,8 @@ interface TournamentSnapshot {
   roundPairings: Record<string, PairingResult>;
   /** Total number of rounds. */
   rounds: number;
+  /** Optional ordered list of tiebreak identifiers. */
+  tiebreaks?: string[];
 }
 
 /**

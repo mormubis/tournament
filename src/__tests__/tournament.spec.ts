@@ -111,6 +111,37 @@ describe('Tournament', () => {
       });
       expect(t.isComplete).toBe(false);
     });
+
+    it('tiebreaks defaults to empty array', () => {
+      const t = new Tournament({
+        pairingSystem: mockPairingSystem,
+        players,
+        rounds: 3,
+      });
+      expect(t.tiebreaks).toEqual([]);
+    });
+
+    it('tiebreaks returns the configured IDs', () => {
+      const t = new Tournament({
+        pairingSystem: mockPairingSystem,
+        players,
+        rounds: 3,
+        tiebreaks: ['buchholz', 'sonneborn-berger'],
+      });
+      expect(t.tiebreaks).toEqual(['buchholz', 'sonneborn-berger']);
+    });
+
+    it('tiebreaks returns a defensive copy', () => {
+      const t = new Tournament({
+        pairingSystem: mockPairingSystem,
+        players,
+        rounds: 3,
+        tiebreaks: ['buchholz'],
+      });
+      const copy = t.tiebreaks;
+      (copy as string[]).push('extra');
+      expect(t.tiebreaks).toEqual(['buchholz']);
+    });
   });
 
   describe('pairRound()', () => {
@@ -382,6 +413,50 @@ describe('Tournament', () => {
       const restored = Tournament.fromJSON(snap1, mockPairingSystem);
       const snap2 = restored.toJSON();
       expect(snap2).toEqual(snap1);
+    });
+
+    it('toJSON includes tiebreaks when configured', () => {
+      const t = new Tournament({
+        pairingSystem: mockPairingSystem,
+        players,
+        rounds: 2,
+        tiebreaks: ['buchholz', 'sonneborn-berger'],
+      });
+      const json = t.toJSON();
+      expect(json.tiebreaks).toEqual(['buchholz', 'sonneborn-berger']);
+    });
+
+    it('toJSON omits tiebreaks when empty', () => {
+      const t = new Tournament({
+        pairingSystem: mockPairingSystem,
+        players,
+        rounds: 2,
+      });
+      const json = t.toJSON();
+      expect(json.tiebreaks).toBeUndefined();
+    });
+
+    it('fromJSON restores tiebreak IDs', () => {
+      const t = new Tournament({
+        pairingSystem: mockPairingSystem,
+        players,
+        rounds: 2,
+        tiebreaks: ['buchholz'],
+      });
+      const restored = Tournament.fromJSON(t.toJSON(), mockPairingSystem);
+      expect(restored.tiebreaks).toEqual(['buchholz']);
+    });
+
+    it('fromJSON handles snapshots without tiebreaks', () => {
+      const snapshot = {
+        currentRound: 0,
+        games: [],
+        players,
+        roundPairings: {},
+        rounds: 2,
+      };
+      const restored = Tournament.fromJSON(snapshot, mockPairingSystem);
+      expect(restored.tiebreaks).toEqual([]);
     });
   });
 

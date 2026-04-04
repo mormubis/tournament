@@ -46,6 +46,7 @@ class Tournament {
   readonly #players: Player[];
   #roundPairings = new Map<number, PairingResult>();
   readonly #rounds: number;
+  readonly #tiebreaks: string[];
 
   /**
    * Creates a new tournament.
@@ -64,6 +65,7 @@ class Tournament {
     this.#pairingSystem = options.pairingSystem;
     this.#players = [...options.players];
     this.#rounds = options.rounds;
+    this.#tiebreaks = options.tiebreaks ? [...options.tiebreaks] : [];
   }
 
   /** The current round number (1-based), or 0 if no round has been paired yet. */
@@ -92,6 +94,11 @@ class Tournament {
   /** Total number of rounds in the tournament. */
   get rounds(): number {
     return this.#rounds;
+  }
+
+  /** Ordered list of tiebreak identifiers. Returns a defensive copy. */
+  get tiebreaks(): readonly string[] {
+    return [...this.#tiebreaks];
   }
 
   /**
@@ -303,6 +310,7 @@ class Tournament {
       players: [...this.#players],
       roundPairings,
       rounds: this.#rounds,
+      ...(this.#tiebreaks.length > 0 && { tiebreaks: [...this.#tiebreaks] }),
     };
   }
 
@@ -325,6 +333,7 @@ class Tournament {
       pairingSystem,
       players: snapshot.players,
       rounds: snapshot.rounds,
+      tiebreaks: snapshot.tiebreaks,
     });
     tournament.#currentRound = snapshot.currentRound;
     tournament.#games = snapshot.games.map((r) => [...r]);

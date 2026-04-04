@@ -78,6 +78,7 @@ class Tournament {
   get isComplete(): boolean;
   get players(): Player[];
   get rounds(): number;
+  get tiebreaks(): string[];
 
   toJSON(): TournamentSnapshot;
   static fromJSON(
@@ -98,6 +99,7 @@ interface TournamentOptions {
   pairingSystem: PairingSystem; // e.g. pair from @echecs/swiss/dutch
   players: Player[]; // all participants
   rounds: number; // total number of rounds
+  tiebreaks?: string[]; // opaque IDs preserved through serialization
 }
 ```
 
