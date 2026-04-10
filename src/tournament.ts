@@ -101,6 +101,82 @@ class Tournament {
     return [...this.#tiebreaks];
   }
 
+  #buildVirtualGames(round: number): Game[] {
+    if (!this.#acceleration) {
+      return [];
+    }
+    const virtualGames: Game[] = [];
+    for (const player of this.#players) {
+      const vp = this.#acceleration.virtualPoints(player, round, this.#rounds);
+      if (vp > 0) {
+        virtualGames.push({
+          black: player.id,
+          result: vp as Result,
+          white: player.id,
+        });
+      }
+    }
+    return virtualGames;
+  }
+
+  #findGame(
+    round: number,
+    white: string,
+    black: string,
+  ): { index: number; roundGames: Game[] } {
+    if (round < 1 || round > this.#currentRound) {
+      throw new RangeError('invalid round number');
+    }
+
+    const roundGames = this.#games[round - 1];
+    if (!roundGames || roundGames.length === 0) {
+      throw new RangeError(`no results recorded for round ${round}`);
+    }
+
+    const index = roundGames.findIndex(
+      (g) =>
+        (g.white === white && g.black === black) ||
+        (g.white === black && g.black === white),
+    );
+    if (index === -1) {
+      throw new RangeError(
+        `no result found for ${white} vs ${black} in round ${round}`,
+      );
+    }
+
+    return { index, roundGames };
+  }
+
+  #isRoundComplete(round: number): boolean {
+    const pairings = this.#roundPairings.get(round);
+    if (!pairings) {
+      return false;
+    }
+    return (this.#games[round - 1]?.length ?? 0) >= pairings.pairings.length;
+  }
+
+  #validateKind(kind: GameKind | undefined, result: Result): void {
+    if (kind === undefined) {
+      return;
+    }
+
+    const expectedResults: Record<GameKind, Result> = {
+      'forfeit-loss': 0,
+      'forfeit-win': 1,
+      'full-bye': 1,
+      'half-bye': 0.5,
+      'pairing-bye': 1,
+      'zero-bye': 0,
+    };
+
+    const expected = expectedResults[kind];
+    if (result !== expected) {
+      throw new RangeError(
+        `result ${result} is inconsistent with kind '${kind}'`,
+      );
+    }
+  }
+
   /**
    * Removes a previously recorded result from the specified round. The game is
    * identified by the player pair (checked in both color orderings).
@@ -116,6 +192,35 @@ class Tournament {
   clearResult(round: number, white: string, black: string): void {
     const { index, roundGames } = this.#findGame(round, white, black);
     roundGames.splice(index, 1);
+  }
+
+  /**
+   * Restores a tournament from a serialized snapshot. The pairing system
+   * function must be re-provided since functions are not JSON-serializable.
+   *
+   * @param snapshot - A snapshot previously returned by {@link toJSON}.
+   * @param pairingSystem - The pairing function to use for future rounds.
+   * @param acceleration - Optional acceleration method.
+   * @returns A restored Tournament instance.
+   */
+  static fromJSON(
+    snapshot: TournamentSnapshot,
+    pairingSystem: PairingSystem,
+    acceleration?: AccelerationMethod,
+  ): Tournament {
+    const tournament = new Tournament({
+      acceleration,
+      pairingSystem,
+      players: snapshot.players,
+      rounds: snapshot.rounds,
+      tiebreaks: snapshot.tiebreaks,
+    });
+    tournament.#currentRound = snapshot.currentRound;
+    tournament.#games = snapshot.games.map((r) => [...r]);
+    for (const [round, pairings] of Object.entries(snapshot.roundPairings)) {
+      tournament.#roundPairings.set(Number(round), pairings);
+    }
+    return tournament;
   }
 
   /**
@@ -147,39 +252,6 @@ class Tournament {
     this.#roundPairings.set(this.#currentRound, result);
     this.#games.push([]);
     return result;
-  }
-
-  /**
-   * Replaces an existing result in any round. The game is identified by the
-   * `white`/`black` player pair (checked in both orderings). The stored game
-   * retains its original color assignment.
-   *
-   * @param round - The 1-based round number.
-   * @param game - The updated game data.
-   * @throws {RangeError} If the round is invalid, no matching result exists,
-   *   or `kind` and `result` are inconsistent.
-   */
-  updateResult(
-    round: number,
-    game: {
-      black: string;
-      kind?: GameKind;
-      result: Result;
-      white: string;
-    },
-  ): void {
-    this.#validateKind(game.kind, game.result);
-    const { index, roundGames } = this.#findGame(round, game.white, game.black);
-
-    const existing = roundGames[index];
-    if (existing) {
-      roundGames[index] = {
-        black: existing.black,
-        kind: game.kind,
-        result: game.result,
-        white: existing.white,
-      };
-    }
   }
 
   /**
@@ -315,107 +387,35 @@ class Tournament {
   }
 
   /**
-   * Restores a tournament from a serialized snapshot. The pairing system
-   * function must be re-provided since functions are not JSON-serializable.
+   * Replaces an existing result in any round. The game is identified by the
+   * `white`/`black` player pair (checked in both orderings). The stored game
+   * retains its original color assignment.
    *
-   * @param snapshot - A snapshot previously returned by {@link toJSON}.
-   * @param pairingSystem - The pairing function to use for future rounds.
-   * @param acceleration - Optional acceleration method.
-   * @returns A restored Tournament instance.
+   * @param round - The 1-based round number.
+   * @param game - The updated game data.
+   * @throws {RangeError} If the round is invalid, no matching result exists,
+   *   or `kind` and `result` are inconsistent.
    */
-  static fromJSON(
-    snapshot: TournamentSnapshot,
-    pairingSystem: PairingSystem,
-    acceleration?: AccelerationMethod,
-  ): Tournament {
-    const tournament = new Tournament({
-      acceleration,
-      pairingSystem,
-      players: snapshot.players,
-      rounds: snapshot.rounds,
-      tiebreaks: snapshot.tiebreaks,
-    });
-    tournament.#currentRound = snapshot.currentRound;
-    tournament.#games = snapshot.games.map((r) => [...r]);
-    for (const [round, pairings] of Object.entries(snapshot.roundPairings)) {
-      tournament.#roundPairings.set(Number(round), pairings);
-    }
-    return tournament;
-  }
-
-  #findGame(
+  updateResult(
     round: number,
-    white: string,
-    black: string,
-  ): { index: number; roundGames: Game[] } {
-    if (round < 1 || round > this.#currentRound) {
-      throw new RangeError('invalid round number');
-    }
+    game: {
+      black: string;
+      kind?: GameKind;
+      result: Result;
+      white: string;
+    },
+  ): void {
+    this.#validateKind(game.kind, game.result);
+    const { index, roundGames } = this.#findGame(round, game.white, game.black);
 
-    const roundGames = this.#games[round - 1];
-    if (!roundGames || roundGames.length === 0) {
-      throw new RangeError(`no results recorded for round ${round}`);
-    }
-
-    const index = roundGames.findIndex(
-      (g) =>
-        (g.white === white && g.black === black) ||
-        (g.white === black && g.black === white),
-    );
-    if (index === -1) {
-      throw new RangeError(
-        `no result found for ${white} vs ${black} in round ${round}`,
-      );
-    }
-
-    return { index, roundGames };
-  }
-
-  #buildVirtualGames(round: number): Game[] {
-    if (!this.#acceleration) {
-      return [];
-    }
-    const virtualGames: Game[] = [];
-    for (const player of this.#players) {
-      const vp = this.#acceleration.virtualPoints(player, round, this.#rounds);
-      if (vp > 0) {
-        virtualGames.push({
-          black: player.id,
-          result: vp as Result,
-          white: player.id,
-        });
-      }
-    }
-    return virtualGames;
-  }
-
-  #isRoundComplete(round: number): boolean {
-    const pairings = this.#roundPairings.get(round);
-    if (!pairings) {
-      return false;
-    }
-    return (this.#games[round - 1]?.length ?? 0) >= pairings.pairings.length;
-  }
-
-  #validateKind(kind: GameKind | undefined, result: Result): void {
-    if (kind === undefined) {
-      return;
-    }
-
-    const expectedResults: Record<GameKind, Result> = {
-      'forfeit-loss': 0,
-      'forfeit-win': 1,
-      'full-bye': 1,
-      'half-bye': 0.5,
-      'pairing-bye': 1,
-      'zero-bye': 0,
-    };
-
-    const expected = expectedResults[kind];
-    if (result !== expected) {
-      throw new RangeError(
-        `result ${result} is inconsistent with kind '${kind}'`,
-      );
+    const existing = roundGames[index];
+    if (existing) {
+      roundGames[index] = {
+        black: existing.black,
+        kind: game.kind,
+        result: game.result,
+        white: existing.white,
+      };
     }
   }
 }
