@@ -9,7 +9,7 @@ See the root `AGENTS.md` for workspace-wide conventions (package manager,
 TypeScript settings, formatting, naming, testing, ESLint rules).
 
 **Backlog:** tracked in
-[GitHub Issues](https://github.com/mormubis/tournament/issues).
+[GitHub Issues](https://github.com/echecsjs/tournament/issues).
 
 ---
 

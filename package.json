@@ -1,7 +1,7 @@
 {
   "author": "Adrian de la Rosa <adrian@delarosab.me>",
   "bugs": {
-    "url": "https://github.com/mormubis/tournament/issues"
+    "url": "https://github.com/echecsjs/tournament/issues"
   },
   "description": "Stateful chess tournament orchestrator for any FIDE pairing system. Supports Swiss, round-robin, and accelerated formats. Zero dependencies.",
   "devDependencies": {
@@ -38,7 +38,7 @@
     "README.md",
     "CHANGELOG.md"
   ],
-  "homepage": "https://github.com/mormubis/tournament#readme",
+  "homepage": "https://github.com/echecsjs/tournament#readme",
   "keywords": [
     "chess",
     "fide",
@@ -55,7 +55,7 @@
   "name": "@echecs/tournament",
   "repository": {
     "type": "git",
-    "url": "https://github.com/mormubis/tournament.git"
+    "url": "https://github.com/echecsjs/tournament.git"
   },
   "publishConfig": {
     "access": "public"

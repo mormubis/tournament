@@ -1,7 +1,7 @@
 # Tournament
 
 [![npm](https://img.shields.io/npm/v/@echecs/tournament)](https://www.npmjs.com/package/@echecs/tournament)
-[![Coverage](https://codecov.io/gh/mormubis/tournament/branch/main/graph/badge.svg)](https://codecov.io/gh/mormubis/tournament)
+[![Coverage](https://codecov.io/gh/echecsjs/tournament/branch/main/graph/badge.svg)](https://codecov.io/gh/echecsjs/tournament)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 **Tournament** is a TypeScript library for orchestrating chess tournaments using
