@@ -326,8 +326,6 @@ type Tiebreak = (
   players: Player[],
 ) => number;
 
-type Result = 0 | 0.5 | 1;
-
 type PairingSystem = (players: Player[], games: Game[][]) => PairingResult;
 
 interface AccelerationMethod {
