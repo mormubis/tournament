@@ -1,7 +1,16 @@
+# Output
+/dist/
+
+# Node
+/node_modules/
+
+# Tests
 coverage/
-dist/
-node_modules/
 
 # Documentation
 docs/api/*
 !docs/api/.gitkeep
+
+# Agent planning artifacts
+.superpowers/
+docs/superpowers/
