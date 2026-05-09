@@ -401,17 +401,33 @@ describe('Tournament', () => {
     });
 
     it('includes point adjustments in standings', () => {
-      const t = new Tournament(
-        makeData({
-          adjustments: [{ playerId: 'a', points: -0.5, round: 0 }],
-          totalRounds: 1,
-        }),
-        { pairingSystem: mockPairingSystem },
-      );
+      const t = new Tournament(makeData({ totalRounds: 1 }), {
+        pairingSystem: mockPairingSystem,
+      });
       pairAndRecordRound(t);
+      t.adjust({ playerId: 'a', points: -0.5, round: 0 });
       const s = t.standings();
       const a = s.find((x) => x.player === 'a')!;
       expect(a.score).toBe(0.5); // 1 (win) - 0.5 (adjustment)
+    });
+
+    it('standings reads Player.points directly', () => {
+      const t = new Tournament(
+        makeData({
+          players: [
+            { id: 'a', points: 3, rank: 1 },
+            { id: 'b', points: 1, rank: 2 },
+          ],
+          totalRounds: 5,
+        }),
+        { pairingSystem: mockPairingSystem },
+      );
+      // No games recorded — standings should reflect initial points
+      const s = t.standings();
+      expect(s[0]!.player).toBe('a');
+      expect(s[0]!.score).toBe(3);
+      expect(s[1]!.player).toBe('b');
+      expect(s[1]!.score).toBe(1);
     });
   });
 

@@ -517,53 +517,8 @@ class Tournament {
    */
   standings(tiebreaks?: Tiebreak[]): Standing[] {
     const effectiveTiebreaks = tiebreaks ?? this.#tiebreakFns;
-    const scoring = this.#data.scoringSystem ?? FIDE_SCORING;
-    const adjustments = this.#data.adjustments ?? [];
 
     const results = this.#data.players.map((player) => {
-      let score = 0;
-
-      // Score from completed rounds
-      for (const round of this.#completedRounds) {
-        for (const game of round.games) {
-          if (game.white === player.id) {
-            score += scoreForGame(game, 'white', scoring);
-          } else if (game.black === player.id) {
-            score += scoreForGame(game, 'black', scoring);
-          }
-        }
-        for (const bye of round.byes) {
-          if (bye.player === player.id) {
-            score += scoreForBye(bye, scoring);
-          }
-        }
-      }
-
-      // Score from current round (games that are completed)
-      if (this.#currentRound) {
-        for (const entry of this.#currentRound.games) {
-          if (isGame(entry)) {
-            if (entry.white === player.id) {
-              score += scoreForGame(entry, 'white', scoring);
-            } else if (entry.black === player.id) {
-              score += scoreForGame(entry, 'black', scoring);
-            }
-          }
-        }
-        for (const bye of this.#currentRound.byes) {
-          if (bye.player === player.id) {
-            score += scoreForBye(bye, scoring);
-          }
-        }
-      }
-
-      // Adjustments
-      for (const adj of adjustments) {
-        if (adj.playerId === player.id) {
-          score += adj.points;
-        }
-      }
-
       const tiebreakValues = effectiveTiebreaks.map((tb) =>
         tb(player.id, this.#completedRounds, this.#data.players),
       );
@@ -571,7 +526,7 @@ class Tournament {
       return {
         player: player.id,
         rank: 0,
-        score,
+        score: player.points,
         tiebreaks: tiebreakValues,
       };
     });
@@ -591,7 +546,7 @@ class Tournament {
       return 0;
     });
 
-    // Assign ranks (1-based, ties get same rank)
+    // Assign ranks (1-based, ties get same rank) and update Player.rank
     let previous: (typeof results)[number] | undefined;
     for (const [index, current] of results.entries()) {
       if (previous === undefined) {
@@ -604,6 +559,13 @@ class Tournament {
           );
         current.rank = tied ? previous.rank : index + 1;
       }
+
+      // Update Player.rank on the source data
+      const player = this.#findPlayer(current.player);
+      if (player) {
+        player.rank = current.rank;
+      }
+
       previous = current;
     }
 
