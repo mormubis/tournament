@@ -14,8 +14,10 @@ import type {
   TournamentData,
 } from '../types.js';
 
-const tiebreakFavorA: Tiebreak = (playerId) => (playerId === 'a' ? 1 : 0);
 const tiebreakConstant: Tiebreak = () => 42;
+const tiebreakFavorA: Tiebreak = (playerId) => (playerId === 'a' ? 1 : 0);
+const tiebreakBH: Tiebreak = () => 0;
+const tiebreakFAV: Tiebreak = (playerId) => (playerId === 'a' ? 1 : 0);
 
 const mockPairingSystem: PairingSystem = (players): Pairings => {
   const games: Pairing[] = [];
@@ -84,6 +86,45 @@ describe('Tournament', () => {
         pairingSystem: mockPairingSystem,
       });
       expect(t).toBeInstanceOf(Tournament);
+    });
+
+    it('resolves tiebreaks from registry', () => {
+      const t = new Tournament(makeData({ tiebreaks: ['BH'] }), {
+        pairingSystem: mockPairingSystem,
+        tiebreaks: { BH: tiebreakConstant },
+      });
+      const s = t.standings();
+      expect(s[0]!.tiebreaks).toEqual([42]);
+    });
+
+    it('calls onWarning for unresolved tiebreaks', () => {
+      const warnings: string[] = [];
+      new Tournament(makeData({ tiebreaks: ['BH', 'SB'] }), {
+        onWarning: (message) => warnings.push(message),
+        pairingSystem: mockPairingSystem,
+        tiebreaks: { BH: tiebreakBH },
+      });
+      expect(warnings).toHaveLength(1);
+      expect(warnings[0]).toContain('SB');
+    });
+
+    it('standings uses constructor tiebreaks by default', () => {
+      const t = new Tournament(
+        makeData({
+          players: [
+            { id: 'a', points: 0, rank: 1 },
+            { id: 'b', points: 0, rank: 2 },
+          ],
+          tiebreaks: ['FAV'],
+          totalRounds: 1,
+        }),
+        { pairingSystem: mockPairingSystem, tiebreaks: { FAV: tiebreakFAV } },
+      );
+      t.pair();
+      t.record(makeGame('a', 'b', 'draw'));
+      const s = t.standings();
+      expect(s[0]!.player).toBe('a');
+      expect(s[0]!.tiebreaks).toEqual([1]);
     });
   });
 

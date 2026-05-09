@@ -131,7 +131,9 @@ class Tournament {
   #completedRounds: CompletedRound[];
   #currentRound?: Round;
   #data: TournamentData;
+  readonly #onWarning?: (message: string) => void;
   readonly #pairingSystem: PairingSystem;
+  readonly #tiebreakFns: Tiebreak[];
 
   /**
    * Creates a new tournament.
@@ -143,7 +145,9 @@ class Tournament {
     data: TournamentData,
     options: {
       acceleration?: AccelerationMethod;
+      onWarning?: (message: string) => void;
       pairingSystem: PairingSystem;
+      tiebreaks?: Record<string, Tiebreak>;
     },
   ) {
     this.#completedRounds = data.completedRounds.map((r) => ({
@@ -154,7 +158,23 @@ class Tournament {
       ? { ...data.currentRound, games: [...data.currentRound.games] }
       : undefined;
     this.#data = { ...data };
+    this.#onWarning = options.onWarning;
     this.#pairingSystem = options.pairingSystem;
+
+    // Resolve tiebreak IDs to functions
+    const tiebreakIds = data.tiebreaks ?? [];
+    const registry = options.tiebreaks ?? {};
+    this.#tiebreakFns = [];
+    for (const id of tiebreakIds) {
+      const function_ = registry[id];
+      if (function_) {
+        this.#tiebreakFns.push(function_);
+      } else if (this.#onWarning) {
+        this.#onWarning(
+          `tiebreak "${id}" is declared in tournament data but has no registered function. pass it in the tiebreaks option to enable it.`,
+        );
+      }
+    }
   }
 
   #addComment(comment: string): void {
@@ -324,7 +344,9 @@ class Tournament {
     data: TournamentData,
     options: {
       acceleration?: AccelerationMethod;
+      onWarning?: (message: string) => void;
       pairingSystem: PairingSystem;
+      tiebreaks?: Record<string, Tiebreak>;
     },
   ): Tournament {
     return new Tournament(data, options);
@@ -406,7 +428,8 @@ class Tournament {
    * @param tiebreaks - Ordered array of tiebreak functions.
    * @returns Sorted standings array.
    */
-  standings(tiebreaks: Tiebreak[] = []): Standing[] {
+  standings(tiebreaks?: Tiebreak[]): Standing[] {
+    const effectiveTiebreaks = tiebreaks ?? this.#tiebreakFns;
     const scoring = this.#data.scoringSystem ?? FIDE_SCORING;
     const adjustments = this.#data.adjustments ?? [];
 
@@ -454,7 +477,7 @@ class Tournament {
         }
       }
 
-      const tiebreakValues = tiebreaks.map((tb) =>
+      const tiebreakValues = effectiveTiebreaks.map((tb) =>
         tb(player.id, this.#completedRounds, this.#data.players),
       );
 
@@ -472,7 +495,7 @@ class Tournament {
       if (scoreDiff !== 0) {
         return scoreDiff;
       }
-      for (let index = 0; index < tiebreaks.length; index++) {
+      for (let index = 0; index < effectiveTiebreaks.length; index++) {
         const diff = (b.tiebreaks[index] ?? 0) - (a.tiebreaks[index] ?? 0);
         if (diff !== 0) {
           return diff;
