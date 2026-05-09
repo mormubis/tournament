@@ -16,8 +16,7 @@ import type {
 
 const tiebreakConstant: Tiebreak = () => 42;
 const tiebreakFavorA: Tiebreak = (playerId) => (playerId === 'a' ? 1 : 0);
-const tiebreakBH: Tiebreak = () => 0;
-const tiebreakFAV: Tiebreak = (playerId) => (playerId === 'a' ? 1 : 0);
+const tiebreakZero: Tiebreak = () => 0;
 
 const mockPairingSystem: PairingSystem = (players): Pairings => {
   const games: Pairing[] = [];
@@ -102,7 +101,7 @@ describe('Tournament', () => {
       new Tournament(makeData({ tiebreaks: ['BH', 'SB'] }), {
         onWarning: (message) => warnings.push(message),
         pairingSystem: mockPairingSystem,
-        tiebreaks: { BH: tiebreakBH },
+        tiebreaks: { BH: tiebreakZero },
       });
       expect(warnings).toHaveLength(1);
       expect(warnings[0]).toContain('SB');
@@ -118,7 +117,10 @@ describe('Tournament', () => {
           tiebreaks: ['FAV'],
           totalRounds: 1,
         }),
-        { pairingSystem: mockPairingSystem, tiebreaks: { FAV: tiebreakFAV } },
+        {
+          pairingSystem: mockPairingSystem,
+          tiebreaks: { FAV: tiebreakFavorA },
+        },
       );
       t.pair();
       t.record(makeGame('a', 'b', 'draw'));
@@ -572,6 +574,24 @@ describe('Tournament', () => {
       expect(json.players.find((p) => p.id === 'b')!.points).toBe(0);
     });
 
+    it('clears a result in a promoted completed round', () => {
+      const t = new Tournament(makeData({ totalRounds: 2 }), {
+        pairingSystem: mockPairingSystem,
+      });
+      pairAndRecordRound(t);
+      t.pair(); // promotes round 1 to completedRounds
+      // Clear a game in the now-completed round 1
+      t.clear(1, 'a', 'b');
+      const json = t.toJSON();
+      const game = json.completedRounds[0]!.games.find(
+        (g) => g.white === 'a' && g.black === 'b',
+      );
+      expect(game).toBeDefined();
+      expect('result' in game! && typeof game!.result === 'string').toBe(false);
+      // Player points should be decremented
+      expect(json.players.find((p) => p.id === 'a')!.points).toBe(0);
+    });
+
     it('throws RangeError for round 0', () => {
       const t = new Tournament(makeData({ totalRounds: 1 }), {
         pairingSystem: mockPairingSystem,
@@ -896,12 +916,16 @@ describe('Tournament', () => {
         pairingSystem: mockPairingSystem,
       });
       pairAndRecordRound(t);
-      // The last round stays as currentRound — no subsequent pair() promotes it
-      const json = t.toJSON();
-      expect(json.currentRound).toBeDefined();
-      expect(json.completedRounds).toHaveLength(0);
-      // Tournament is effectively done: pair() throws
+      // The last round stays as currentRound until pair() is called
+      const before = t.toJSON();
+      expect(before.currentRound).toBeDefined();
+      expect(before.completedRounds).toHaveLength(0);
+      // pair() promotes the round, then throws because tournament is complete
       expect(() => t.pair()).toThrow(RangeError);
+      // After the throw, state is consistent: round promoted, no currentRound
+      const after = t.toJSON();
+      expect(after.completedRounds).toHaveLength(1);
+      expect(after.currentRound).toBeUndefined();
     });
 
     it('completes a 2-round tournament pair-record-pair-record', () => {

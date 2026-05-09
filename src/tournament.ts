@@ -285,10 +285,10 @@ class Tournament {
         blackPlayer.points -= scoreForGame(existing, 'black', scoring);
       }
     }
-    completedRound.games[index] = {
+    (completedRound.games as (Game | Pairing)[])[index] = {
       black: existing.black,
       white: existing.white,
-    } as Game;
+    };
   }
 
   /**
@@ -474,7 +474,8 @@ class Tournament {
 
   /**
    * Records a result for a pairing in the current round. Validates the
-   * pairing exists. When all pairings have results, the round auto-completes.
+   * pairing exists. Results accumulate on `currentRound`. The round is
+   * promoted to `completedRounds` by the next `pair()` call.
    *
    * @param game - The game result to record.
    * @throws {RangeError} If no round has been paired or the players don't
