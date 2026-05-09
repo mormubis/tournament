@@ -1,5 +1,16 @@
 # Changelog
 
+## [3.1.0] - 2026-05-09
+
+### Added
+
+- read-only getters: `completedRounds`, `currentRound`, `isComplete`,
+  `metadata`, `players`, `totalRounds`
+
+### Removed
+
+- `fromJSON()` — use `new Tournament(data, options)` instead
+
 ## [3.0.0] - 2026-05-09
 
 ### Breaking Changes
