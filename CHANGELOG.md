@@ -1,5 +1,40 @@
 # Changelog
 
+## [3.0.0] - 2026-05-09
+
+### Breaking Changes
+
+- `Player` requires `points` and `rank` fields
+- `Game` uses string results (`'white'` / `'black'` / `'draw'` / `'none'`)
+  instead of numeric `Result`
+- `GameKind` removed — replaced by `forfeit` on `Game` and `kind` on `Bye`
+- `TournamentOptions` / `TournamentSnapshot` / `PairingResult` removed
+- constructor takes `TournamentData` + options instead of `TournamentOptions`
+- `PairingSystem` signature takes `CompletedRound[]` instead of `Game[][]`
+- `Tiebreak` signature takes `CompletedRound[]` instead of `Game[][]`
+- `withdraw()` no longer removes players from `players[]`
+- rounds no longer auto-promote on last `record()` — `pair()` promotes
+
+### Added
+
+- `Player.points` as source of truth — maintained by `record()`, `correct()`,
+  `clear()`, `adjust()`, `pair()`. `standings()` reads it directly.
+- `Player.rank` maintained — `standings()` writes back `Player.rank`
+- tiebreaks registry — constructor accepts
+  `tiebreaks?: Record<string, Tiebreak>`
+- `onWarning` callback — warns at construction for unresolved tiebreak IDs
+- `ScoringSystem` — 17-field scoring config with color-specific fallbacks
+- `FIDE_SCORING` constant
+- withdrawal tracking — `withdraw()` tracks in a `Set`, preserving player data
+- round lifecycle — `Pairings` -> `Round` -> `CompletedRound`
+- `PointAdjustment` — audit trail for arbiter score adjustments
+- `TournamentMetadata` — report info with auto-logged comments
+- FIDE metadata on `Player` — `birthDate`, `federation`, `fideId`, `name`,
+  `nationalRatings`, `sex`, `startingRank`, `title`
+- new types: `AcceleratedRound`, `CompletedRound`, `NationalRating`, `Pairings`,
+  `PlayerAcceleration`, `PointAdjustment`, `ProhibitedPairing`, `Round`,
+  `ScoringSystem`, `Team`, `TournamentData`, `TournamentMetadata`
+
 ## [2.1.2] - 2026-04-17
 
 ### Fixed
