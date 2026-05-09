@@ -425,17 +425,30 @@ class Tournament {
 
   /**
    * Generates pairings for the next round using the injected pairing system.
+   * If a current round exists and all games are complete, promotes it to
+   * completedRounds before pairing the next round.
    *
    * @returns The pairings and byes for the new round.
    * @throws {RangeError} If the tournament is complete or the current round
    *   has unrecorded results.
    */
   pair(): Pairings {
+    if (this.#currentRound) {
+      const allComplete = this.#currentRound.games.every((entry) =>
+        isGame(entry),
+      );
+      if (!allComplete) {
+        throw new RangeError('current round has unrecorded results');
+      }
+      this.#completedRounds.push({
+        byes: this.#currentRound.byes,
+        games: this.#currentRound.games as Game[],
+      });
+      this.#currentRound = undefined;
+    }
+
     if (this.#completedRounds.length >= this.#data.totalRounds) {
       throw new RangeError('tournament is complete');
-    }
-    if (this.#currentRound) {
-      throw new RangeError('current round has unrecorded results');
     }
 
     const activePlayers = this.#data.players.filter(
@@ -499,15 +512,6 @@ class Tournament {
     }
     if (blackPlayer) {
       blackPlayer.points += scoreForGame(recorded, 'black', scoring);
-    }
-
-    // Auto-complete the round if all pairings have results
-    if (this.#currentRound.games.every((entry) => isGame(entry))) {
-      this.#completedRounds.push({
-        byes: this.#currentRound.byes,
-        games: this.#currentRound.games as Game[],
-      });
-      this.#currentRound = undefined;
     }
   }
 

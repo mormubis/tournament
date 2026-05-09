@@ -155,6 +155,19 @@ describe('Tournament', () => {
       expect(() => t.pair()).toThrow(RangeError);
     });
 
+    it('promotes completed currentRound to completedRounds', () => {
+      const t = new Tournament(makeData({ totalRounds: 2 }), {
+        pairingSystem: mockPairingSystem,
+      });
+      t.pair();
+      t.record(makeGame('a', 'b', 'white'));
+      t.record(makeGame('c', 'd', 'white'));
+      t.pair(); // should promote round 1, then pair round 2
+      const json = t.toJSON();
+      expect(json.completedRounds).toHaveLength(1);
+      expect(json.currentRound).toBeDefined();
+    });
+
     it('updates Player.points for byes on pair', () => {
       const t = new Tournament(
         makeData({
@@ -243,14 +256,17 @@ describe('Tournament', () => {
       expect(json.currentRound!.games).toHaveLength(2);
     });
 
-    it('auto-completes the round when all results are recorded', () => {
-      const t = new Tournament(makeData(), {
+    it('does not auto-promote round to completedRounds', () => {
+      const t = new Tournament(makeData({ totalRounds: 2 }), {
         pairingSystem: mockPairingSystem,
       });
-      pairAndRecordRound(t);
+      t.pair();
+      t.record(makeGame('a', 'b', 'white'));
+      t.record(makeGame('c', 'd', 'white'));
+      // Round should stay as currentRound even though all games recorded
       const json = t.toJSON();
-      expect(json.currentRound).toBeUndefined();
-      expect(json.completedRounds).toHaveLength(1);
+      expect(json.currentRound).toBeDefined();
+      expect(json.completedRounds).toHaveLength(0);
     });
 
     it('throws RangeError for a non-existent pairing', () => {
@@ -274,13 +290,15 @@ describe('Tournament', () => {
       });
       pairAndRecordRound(t);
       pairAndRecordRound(t);
-
+      // After 2 pairAndRecordRounds: round 1 was promoted when round 2 was paired,
+      // round 2 stays as currentRound (no subsequent pair() call)
       const json = t.toJSON();
-      const totalGames = json.completedRounds.reduce(
+      const completedGames = json.completedRounds.reduce(
         (sum, r) => sum + r.games.length,
         0,
       );
-      expect(totalGames).toBe(4);
+      const currentGames = json.currentRound?.games.length ?? 0;
+      expect(completedGames + currentGames).toBe(4);
     });
   });
 
@@ -519,14 +537,15 @@ describe('Tournament', () => {
   });
 
   describe('clear()', () => {
-    it('clears a result in a completed round', () => {
+    it('clears a result in the current round', () => {
       const t = new Tournament(makeData({ totalRounds: 1 }), {
         pairingSystem: mockPairingSystem,
       });
       pairAndRecordRound(t);
+      // Round 1 stays as currentRound after recording all results
       t.clear(1, 'a', 'b');
       const json = t.toJSON();
-      const game = json.completedRounds[0]!.games.find(
+      const game = json.currentRound!.games.find(
         (g) => g.white === 'a' && g.black === 'b',
       );
       // Should be reverted to a pairing (no result)
@@ -698,9 +717,10 @@ describe('Tournament', () => {
         pairingSystem: mockPairingSystem,
       });
       pairAndRecordRound(t);
+      // Round 1 stays as currentRound until next pair() promotes it
       const json = t.toJSON();
-      expect(json.completedRounds).toHaveLength(1);
-      expect(json.completedRounds[0]!.games).toHaveLength(2);
+      expect(json.currentRound).toBeDefined();
+      expect(json.currentRound!.games).toHaveLength(2);
       expect(json.totalRounds).toBe(2);
       // eslint-disable-next-line unicorn/prefer-structured-clone
       expect(JSON.parse(JSON.stringify(json))).toEqual(json);
@@ -759,18 +779,18 @@ describe('Tournament', () => {
         pairingSystem: mockPairingSystem,
       });
       pairAndRecordRound(t);
+      // Round 1 is still currentRound; correct() operates on it
       t.correct(1, makeGame('a', 'b', 'black'));
 
       const snap = t.toJSON();
       const restored = Tournament.fromJSON(snap, {
         pairingSystem: mockPairingSystem,
       });
+      // The corrected game is in currentRound (round 1 not yet promoted)
       const restoredGame = restored
         .toJSON()
-        .completedRounds[0]!.games.find(
-          (g) => g.white === 'a' && g.black === 'b',
-        );
-      expect(restoredGame!.result).toBe('black');
+        .currentRound!.games.find((g) => g.white === 'a' && g.black === 'b');
+      expect('result' in restoredGame! && restoredGame.result).toBe('black');
     });
   });
 
@@ -876,9 +896,12 @@ describe('Tournament', () => {
         pairingSystem: mockPairingSystem,
       });
       pairAndRecordRound(t);
+      // The last round stays as currentRound — no subsequent pair() promotes it
       const json = t.toJSON();
-      expect(json.completedRounds).toHaveLength(1);
-      expect(json.currentRound).toBeUndefined();
+      expect(json.currentRound).toBeDefined();
+      expect(json.completedRounds).toHaveLength(0);
+      // Tournament is effectively done: pair() throws
+      expect(() => t.pair()).toThrow(RangeError);
     });
 
     it('completes a 2-round tournament pair-record-pair-record', () => {
@@ -887,10 +910,12 @@ describe('Tournament', () => {
       });
       pairAndRecordRound(t);
       pairAndRecordRound(t);
-
+      // Round 1 promoted when round 2 was paired; round 2 stays as currentRound
       const json = t.toJSON();
-      expect(json.completedRounds).toHaveLength(2);
-      expect(json.currentRound).toBeUndefined();
+      expect(json.completedRounds).toHaveLength(1);
+      expect(json.currentRound).toBeDefined();
+      // pair() promotes round 2 and then throws tournament is complete
+      expect(() => t.pair()).toThrow(RangeError);
 
       const s = t.standings();
       expect(s).toHaveLength(4);
