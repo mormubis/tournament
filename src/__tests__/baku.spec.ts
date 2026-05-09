@@ -7,6 +7,8 @@ import type { Player } from '../types.js';
 function makePlayers(count: number): Player[] {
   return Array.from({ length: count }, (_, index) => ({
     id: String(index + 1),
+    points: 0,
+    rank: index + 1,
   }));
 }
 

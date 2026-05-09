@@ -1,27 +1,4 @@
 /**
- * Classifies unplayed or special game results per FIDE C.07 Article 16.2.
- *
- * | Kind           | Result | FIDE ref    |
- * | -------------- | ------ | ----------- |
- * | `forfeit-win`  | `1`    | Art. 16.2.2 |
- * | `forfeit-loss` | `0`    | Art. 16.2.4 |
- * | `full-bye`     | `1`    | —           |
- * | `half-bye`     | `0.5`  | Art. 16.2.5 |
- * | `pairing-bye`  | `1`    | Art. 16.2.1 |
- * | `zero-bye`     | `0`    | Art. 16.2.3 |
- */
-type GameKind =
-  | 'forfeit-loss'
-  | 'forfeit-win'
-  | 'full-bye'
-  | 'half-bye'
-  | 'pairing-bye'
-  | 'zero-bye';
-
-/** Game result from white's perspective: `1` = white wins, `0.5` = draw, `0` = black wins. */
-type Result = 0 | 0.5 | 1;
-
-/**
  * An acceleration method that adds virtual points to certain players' scores
  * in early rounds, influencing the pairing system without affecting stored
  * results or standings.
@@ -31,22 +8,50 @@ interface AccelerationMethod {
   virtualPoints: (player: Player, round: number, totalRounds: number) => number;
 }
 
+/** Accelerated rounds configuration for a group of players. */
+interface AcceleratedRound {
+  firstPlayerId: string;
+  firstRound: number;
+  gamePoints: number;
+  lastPlayerId: string;
+  lastRound: number;
+  matchPoints: number;
+}
+
 /** A player who receives a bye (no opponent) for a round. */
 interface Bye {
+  /** Bye classification. */
+  kind: 'full' | 'half' | 'pairing' | 'zero';
   /** Player identifier. */
   player: string;
 }
 
-/** A recorded game between two players. */
-interface Game {
-  /** Player identifier for black. */
-  black: string;
-  /** Optional classification of the game type. When set, must be consistent with {@link Result}. */
-  kind?: GameKind;
-  /** Result from white's perspective. */
-  result: Result;
-  /** Player identifier for white. */
-  white: string;
+/** A completed round where all pairings have results. */
+interface CompletedRound extends Pairings {
+  games: Game[];
+}
+
+/**
+ * A recorded game between two players.
+ *
+ * Strict discriminated union: invalid combinations like
+ * `{ forfeit: 'both', result: 'white' }` won't typecheck.
+ * `rated` only applies to played games (no forfeit).
+ */
+type Game = Pairing &
+  (
+    | { forfeit: 'black'; rated?: never; result: 'white' }
+    | { forfeit: 'both'; rated?: never; result: 'none' }
+    | { forfeit: 'white'; rated?: never; result: 'black' }
+    | { forfeit?: never; rated?: boolean; result: 'black' | 'draw' | 'white' }
+  );
+
+/** A national rating record for a player. */
+interface NationalRating {
+  classification?: string;
+  federation: string;
+  nationalId?: string;
+  rating: number;
 }
 
 /** A pairing of two players for a round. */
@@ -58,19 +63,82 @@ interface Pairing {
 }
 
 /** The output of a pairing system for a single round. */
-interface PairingResult {
+interface Pairings {
   /** Players who receive a bye this round. */
   byes: Bye[];
-  /** Pairings for this round. */
-  pairings: Pairing[];
+  /** Pairings (or games) for this round. */
+  games: Pairing[];
+}
+
+/** Per-player acceleration overrides. */
+interface PlayerAcceleration {
+  playerId: string;
+  points: number[];
 }
 
 /** A tournament participant. */
 interface Player {
+  birthDate?: string;
+  federation?: string;
+  fideId?: string;
   /** Unique identifier for the player. */
   id: string;
+  name?: string;
+  nationalRatings?: NationalRating[];
+  /** Cumulative score across all recorded games. */
+  points: number;
+  /** 1-based rank. */
+  rank: number;
   /** Optional Elo rating. */
   rating?: number;
+  sex?: 'm' | 'w';
+  startingRank?: number;
+  title?: 'CM' | 'FM' | 'GM' | 'IM' | 'WCM' | 'WFM' | 'WGM' | 'WIM';
+}
+
+/** Player-level score adjustment (penalty, bonus, arbiter override). */
+interface PointAdjustment {
+  playerId: string;
+  points: number;
+  reason?: string;
+  /** Round this adjustment applies to. 0 = all rounds. */
+  round: number;
+}
+
+/** Prevents certain players from being paired against each other. */
+interface ProhibitedPairing {
+  firstRound: number;
+  lastRound: number;
+  playerIds: string[];
+}
+
+/** A round in progress where some pairings may have results. */
+interface Round extends Pairings {
+  games: (Game | Pairing)[];
+}
+
+/**
+ * Scoring system configuration. Color-specific values fall back to base,
+ * base falls back to FIDE defaults.
+ */
+interface ScoringSystem {
+  absence?: number;
+  blackDraw?: number;
+  blackLoss?: number;
+  blackWin?: number;
+  draw?: number;
+  forfeitLoss?: number;
+  forfeitWin?: number;
+  fullPointBye?: number;
+  halfPointBye?: number;
+  loss?: number;
+  pairingAllocatedBye?: number;
+  unknown?: number;
+  whiteDraw?: number;
+  whiteLoss?: number;
+  whiteWin?: number;
+  win?: number;
+  zeroPointBye?: number;
 }
 
 /** A player's position in the standings table. */
@@ -85,68 +153,92 @@ interface Standing {
   tiebreaks: number[];
 }
 
-/** Options for creating a new {@link Tournament}. */
-interface TournamentOptions {
-  /** Optional acceleration method (e.g. {@link bakuAcceleration}). */
-  acceleration?: AccelerationMethod;
-  /** The pairing function to use each round. */
-  pairingSystem: PairingSystem;
-  /** All tournament participants. Must contain at least 2 players. */
-  players: Player[];
-  /** Total number of rounds. Must be at least 1. */
-  rounds: number;
-  /** Optional ordered list of tiebreak identifiers. Opaque strings preserved through serialization. */
-  tiebreaks?: string[];
+/** A team of players. */
+interface Team {
+  gamePoints: number;
+  id: string;
+  matchPoints: number;
+  name: string;
+  nickname?: string;
+  playerIds: string[];
+  rank: number;
 }
 
-/** Serializable snapshot of a tournament's state, returned by {@link Tournament.toJSON}. */
-interface TournamentSnapshot {
-  /** The current round number (1-based), or 0 if no round has been paired. */
-  currentRound: number;
-  /** All recorded games, grouped by round. */
-  games: Game[][];
-  /** All tournament participants. */
+/** Tournament metadata — report information passed through untouched. */
+interface TournamentMetadata {
+  chiefArbiter?: string;
+  city?: string;
+  comments?: string[];
+  deputyArbiters?: string[];
+  endDate?: string;
+  federation?: string;
+  name?: string;
+  pairingController?: string;
+  roundDates?: string[];
+  startDate?: string;
+  timeControl?: string;
+  tournamentType?: string;
+}
+
+/**
+ * The plain data interface. What `toJSON()` returns and `fromJSON()` accepts.
+ * What `@echecs/trf`'s `parse()` returns and `stringify()` consumes.
+ */
+interface TournamentData {
+  acceleratedRounds?: AcceleratedRound[];
+  adjustments?: PointAdjustment[];
+  completedRounds: CompletedRound[];
+  currentRound?: Round;
+  metadata?: TournamentMetadata;
+  playerAccelerations?: PlayerAcceleration[];
   players: Player[];
-  /** Pairings for each round, keyed by round number as a string. */
-  roundPairings: Record<string, PairingResult>;
-  /** Total number of rounds. */
-  rounds: number;
-  /** Optional ordered list of tiebreak identifiers. */
+  prohibitedPairings?: ProhibitedPairing[];
+  scoringSystem?: ScoringSystem;
+  teams?: Team[];
   tiebreaks?: string[];
+  totalRounds: number;
 }
 
 /**
  * A function that generates pairings for a round given the player list and
- * game history. All pairing functions in `@echecs/swiss` and
- * `@echecs/round-robin` conform to this signature.
+ * completed rounds.
  */
-type PairingSystem = (players: Player[], games: Game[][]) => PairingResult;
+type PairingSystem = (players: Player[], rounds: CompletedRound[]) => Pairings;
 
 /**
  * A tiebreak function that computes a numeric value for a player based on the
- * game history. Higher values rank higher. Tiebreak functions from
- * `@echecs/buchholz`, `@echecs/sonneborn-berger`, etc. conform to this
- * signature.
+ * completed rounds. Higher values rank higher.
  *
  * @param player - The player identifier to compute the tiebreak for.
- * @param games - All recorded games, grouped by round.
+ * @param rounds - All completed rounds.
  * @param players - All tournament participants.
  * @returns A numeric tiebreak value.
  */
-type Tiebreak = (player: string, games: Game[][], players: Player[]) => number;
+type Tiebreak = (
+  player: string,
+  rounds: CompletedRound[],
+  players: Player[],
+) => number;
 
 export type {
   AccelerationMethod,
+  AcceleratedRound,
   Bye,
+  CompletedRound,
   Game,
-  GameKind,
+  NationalRating,
   Pairing,
-  PairingResult,
   PairingSystem,
+  Pairings,
   Player,
-  Result,
+  PlayerAcceleration,
+  PointAdjustment,
+  ProhibitedPairing,
+  Round,
+  ScoringSystem,
   Standing,
+  Team,
   Tiebreak,
-  TournamentOptions,
-  TournamentSnapshot,
+  TournamentData,
+  TournamentMetadata,
 };
