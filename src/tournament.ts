@@ -131,7 +131,10 @@ class Tournament {
   #completedRounds: CompletedRound[];
   #currentRound?: Round;
   #data: TournamentData;
+  readonly #onWarning?: (message: string) => void;
   readonly #pairingSystem: PairingSystem;
+  readonly #tiebreakFns: Tiebreak[];
+  readonly #withdrawn: Set<string>;
 
   /**
    * Creates a new tournament.
@@ -143,7 +146,9 @@ class Tournament {
     data: TournamentData,
     options: {
       acceleration?: AccelerationMethod;
+      onWarning?: (message: string) => void;
       pairingSystem: PairingSystem;
+      tiebreaks?: Record<string, Tiebreak>;
     },
   ) {
     this.#completedRounds = data.completedRounds.map((r) => ({
@@ -154,7 +159,25 @@ class Tournament {
       ? { ...data.currentRound, games: [...data.currentRound.games] }
       : undefined;
     this.#data = { ...data };
+    this.#onWarning = options.onWarning;
     this.#pairingSystem = options.pairingSystem;
+
+    this.#withdrawn = new Set<string>();
+
+    // Resolve tiebreak IDs to functions
+    const tiebreakIds = data.tiebreaks ?? [];
+    const registry = options.tiebreaks ?? {};
+    this.#tiebreakFns = [];
+    for (const id of tiebreakIds) {
+      const function_ = registry[id];
+      if (function_) {
+        this.#tiebreakFns.push(function_);
+      } else if (this.#onWarning) {
+        this.#onWarning(
+          `tiebreak "${id}" is declared in tournament data but has no registered function. pass it in the tiebreaks option to enable it.`,
+        );
+      }
+    }
   }
 
   #addComment(comment: string): void {
@@ -179,6 +202,10 @@ class Tournament {
     );
   }
 
+  #findPlayer(id: string): Player | undefined {
+    return this.#data.players.find((p) => p.id === id);
+  }
+
   /**
    * Adds a point adjustment (penalty, bonus). Affects standings.
    * Logs a comment in metadata.
@@ -188,6 +215,10 @@ class Tournament {
       this.#data.adjustments = [];
     }
     this.#data.adjustments.push(adjustment);
+    const player = this.#findPlayer(adjustment.playerId);
+    if (player) {
+      player.points += adjustment.points;
+    }
     this.#addComment(
       `point adjustment: ${adjustment.points > 0 ? '+' : ''}${adjustment.points} for ${adjustment.playerId}${adjustment.reason ? ` (${adjustment.reason})` : ''}`,
     );
@@ -206,6 +237,8 @@ class Tournament {
       throw new RangeError('invalid round number');
     }
 
+    const scoring = this.#data.scoringSystem ?? FIDE_SCORING;
+
     // Current round
     if (this.#currentRound && round === this.#completedRounds.length + 1) {
       const index = this.#findGameIndex(this.#currentRound.games, white, black);
@@ -214,6 +247,14 @@ class Tournament {
         throw new RangeError(
           `no game found for ${white} vs ${black} in round ${round}`,
         );
+      }
+      const whitePlayer = this.#findPlayer(entry.white);
+      const blackPlayer = this.#findPlayer(entry.black);
+      if (whitePlayer) {
+        whitePlayer.points -= scoreForGame(entry, 'white', scoring);
+      }
+      if (blackPlayer) {
+        blackPlayer.points -= scoreForGame(entry, 'black', scoring);
       }
       this.#currentRound.games[index] = {
         black: entry.black,
@@ -234,10 +275,20 @@ class Tournament {
         `no game found for ${white} vs ${black} in round ${round}`,
       );
     }
-    completedRound.games[index] = {
+    if (isGame(existing)) {
+      const whitePlayer = this.#findPlayer(existing.white);
+      const blackPlayer = this.#findPlayer(existing.black);
+      if (whitePlayer) {
+        whitePlayer.points -= scoreForGame(existing, 'white', scoring);
+      }
+      if (blackPlayer) {
+        blackPlayer.points -= scoreForGame(existing, 'black', scoring);
+      }
+    }
+    (completedRound.games as (Game | Pairing)[])[index] = {
       black: existing.black,
       white: existing.white,
-    } as Game;
+    };
   }
 
   /**
@@ -253,6 +304,8 @@ class Tournament {
       throw new RangeError('invalid round number');
     }
 
+    const scoring = this.#data.scoringSystem ?? FIDE_SCORING;
+
     // Current round
     if (this.#currentRound && round === this.#completedRounds.length + 1) {
       const index = this.#findGameIndex(
@@ -266,11 +319,30 @@ class Tournament {
           `no pairing found for ${game.white} vs ${game.black} in round ${round}`,
         );
       }
-      this.#currentRound.games[index] = {
+      if (isGame(existing)) {
+        const whitePlayer = this.#findPlayer(existing.white);
+        const blackPlayer = this.#findPlayer(existing.black);
+        if (whitePlayer) {
+          whitePlayer.points -= scoreForGame(existing, 'white', scoring);
+        }
+        if (blackPlayer) {
+          blackPlayer.points -= scoreForGame(existing, 'black', scoring);
+        }
+      }
+      const corrected: Game = {
         ...game,
         black: existing.black,
         white: existing.white,
       };
+      this.#currentRound.games[index] = corrected;
+      const whitePlayer = this.#findPlayer(corrected.white);
+      const blackPlayer = this.#findPlayer(corrected.black);
+      if (whitePlayer) {
+        whitePlayer.points += scoreForGame(corrected, 'white', scoring);
+      }
+      if (blackPlayer) {
+        blackPlayer.points += scoreForGame(corrected, 'black', scoring);
+      }
       this.#addComment(
         `result correction in round ${round}: ${game.white} vs ${game.black}`,
       );
@@ -293,11 +365,30 @@ class Tournament {
         `no game found for ${game.white} vs ${game.black} in round ${round}`,
       );
     }
-    completedRound.games[index] = {
+    if (isGame(existing)) {
+      const whitePlayer = this.#findPlayer(existing.white);
+      const blackPlayer = this.#findPlayer(existing.black);
+      if (whitePlayer) {
+        whitePlayer.points -= scoreForGame(existing, 'white', scoring);
+      }
+      if (blackPlayer) {
+        blackPlayer.points -= scoreForGame(existing, 'black', scoring);
+      }
+    }
+    const corrected: Game = {
       ...game,
       black: existing.black,
       white: existing.white,
     };
+    completedRound.games[index] = corrected;
+    const whitePlayer = this.#findPlayer(corrected.white);
+    const blackPlayer = this.#findPlayer(corrected.black);
+    if (whitePlayer) {
+      whitePlayer.points += scoreForGame(corrected, 'white', scoring);
+    }
+    if (blackPlayer) {
+      blackPlayer.points += scoreForGame(corrected, 'black', scoring);
+    }
     this.#addComment(
       `result correction in round ${round}: ${game.white} vs ${game.black}`,
     );
@@ -324,7 +415,9 @@ class Tournament {
     data: TournamentData,
     options: {
       acceleration?: AccelerationMethod;
+      onWarning?: (message: string) => void;
       pairingSystem: PairingSystem;
+      tiebreaks?: Record<string, Tiebreak>;
     },
   ): Tournament {
     return new Tournament(data, options);
@@ -332,35 +425,57 @@ class Tournament {
 
   /**
    * Generates pairings for the next round using the injected pairing system.
+   * If a current round exists and all games are complete, promotes it to
+   * completedRounds before pairing the next round.
    *
    * @returns The pairings and byes for the new round.
    * @throws {RangeError} If the tournament is complete or the current round
    *   has unrecorded results.
    */
   pair(): Pairings {
+    if (this.#currentRound) {
+      const allComplete = this.#currentRound.games.every((entry) =>
+        isGame(entry),
+      );
+      if (!allComplete) {
+        throw new RangeError('current round has unrecorded results');
+      }
+      this.#completedRounds.push({
+        byes: this.#currentRound.byes,
+        games: this.#currentRound.games as Game[],
+      });
+      this.#currentRound = undefined;
+    }
+
     if (this.#completedRounds.length >= this.#data.totalRounds) {
       throw new RangeError('tournament is complete');
     }
-    if (this.#currentRound) {
-      throw new RangeError('current round has unrecorded results');
-    }
 
-    const result = this.#pairingSystem(
-      this.#data.players,
-      this.#completedRounds,
+    const activePlayers = this.#data.players.filter(
+      (p) => !this.#withdrawn.has(p.id),
     );
+    const result = this.#pairingSystem(activePlayers, this.#completedRounds);
 
     this.#currentRound = {
       byes: result.byes,
       games: result.games.map((p) => ({ black: p.black, white: p.white })),
     };
 
+    const scoring = this.#data.scoringSystem ?? FIDE_SCORING;
+    for (const bye of result.byes) {
+      const player = this.#findPlayer(bye.player);
+      if (player) {
+        player.points += scoreForBye(bye, scoring);
+      }
+    }
+
     return result;
   }
 
   /**
    * Records a result for a pairing in the current round. Validates the
-   * pairing exists. When all pairings have results, the round auto-completes.
+   * pairing exists. Results accumulate on `currentRound`. The round is
+   * promoted to `completedRounds` by the next `pair()` call.
    *
    * @param game - The game result to record.
    * @throws {RangeError} If no round has been paired or the players don't
@@ -383,19 +498,21 @@ class Tournament {
       );
     }
 
-    this.#currentRound.games[index] = {
+    const recorded: Game = {
       ...game,
       black: existing.black,
       white: existing.white,
     };
+    this.#currentRound.games[index] = recorded;
 
-    // Auto-complete the round if all pairings have results
-    if (this.#currentRound.games.every((entry) => isGame(entry))) {
-      this.#completedRounds.push({
-        byes: this.#currentRound.byes,
-        games: this.#currentRound.games as Game[],
-      });
-      this.#currentRound = undefined;
+    const scoring = this.#data.scoringSystem ?? FIDE_SCORING;
+    const whitePlayer = this.#findPlayer(recorded.white);
+    const blackPlayer = this.#findPlayer(recorded.black);
+    if (whitePlayer) {
+      whitePlayer.points += scoreForGame(recorded, 'white', scoring);
+    }
+    if (blackPlayer) {
+      blackPlayer.points += scoreForGame(recorded, 'black', scoring);
     }
   }
 
@@ -406,62 +523,18 @@ class Tournament {
    * @param tiebreaks - Ordered array of tiebreak functions.
    * @returns Sorted standings array.
    */
-  standings(tiebreaks: Tiebreak[] = []): Standing[] {
-    const scoring = this.#data.scoringSystem ?? FIDE_SCORING;
-    const adjustments = this.#data.adjustments ?? [];
+  standings(tiebreaks?: Tiebreak[]): Standing[] {
+    const effectiveTiebreaks = tiebreaks ?? this.#tiebreakFns;
 
     const results = this.#data.players.map((player) => {
-      let score = 0;
-
-      // Score from completed rounds
-      for (const round of this.#completedRounds) {
-        for (const game of round.games) {
-          if (game.white === player.id) {
-            score += scoreForGame(game, 'white', scoring);
-          } else if (game.black === player.id) {
-            score += scoreForGame(game, 'black', scoring);
-          }
-        }
-        for (const bye of round.byes) {
-          if (bye.player === player.id) {
-            score += scoreForBye(bye, scoring);
-          }
-        }
-      }
-
-      // Score from current round (games that are completed)
-      if (this.#currentRound) {
-        for (const entry of this.#currentRound.games) {
-          if (isGame(entry)) {
-            if (entry.white === player.id) {
-              score += scoreForGame(entry, 'white', scoring);
-            } else if (entry.black === player.id) {
-              score += scoreForGame(entry, 'black', scoring);
-            }
-          }
-        }
-        for (const bye of this.#currentRound.byes) {
-          if (bye.player === player.id) {
-            score += scoreForBye(bye, scoring);
-          }
-        }
-      }
-
-      // Adjustments
-      for (const adj of adjustments) {
-        if (adj.playerId === player.id) {
-          score += adj.points;
-        }
-      }
-
-      const tiebreakValues = tiebreaks.map((tb) =>
+      const tiebreakValues = effectiveTiebreaks.map((tb) =>
         tb(player.id, this.#completedRounds, this.#data.players),
       );
 
       return {
         player: player.id,
         rank: 0,
-        score,
+        score: player.points,
         tiebreaks: tiebreakValues,
       };
     });
@@ -472,7 +545,7 @@ class Tournament {
       if (scoreDiff !== 0) {
         return scoreDiff;
       }
-      for (let index = 0; index < tiebreaks.length; index++) {
+      for (let index = 0; index < effectiveTiebreaks.length; index++) {
         const diff = (b.tiebreaks[index] ?? 0) - (a.tiebreaks[index] ?? 0);
         if (diff !== 0) {
           return diff;
@@ -481,7 +554,7 @@ class Tournament {
       return 0;
     });
 
-    // Assign ranks (1-based, ties get same rank)
+    // Assign ranks (1-based, ties get same rank) and update Player.rank
     let previous: (typeof results)[number] | undefined;
     for (const [index, current] of results.entries()) {
       if (previous === undefined) {
@@ -494,6 +567,13 @@ class Tournament {
           );
         current.rank = tied ? previous.rank : index + 1;
       }
+
+      // Update Player.rank on the source data
+      const player = this.#findPlayer(current.player);
+      if (player) {
+        player.rank = current.rank;
+      }
+
       previous = current;
     }
 
@@ -525,11 +605,11 @@ class Tournament {
    * Player leaves. No longer paired (FIDE C.04.2 Art 3.2).
    */
   withdraw(playerId: string): void {
-    const index = this.#data.players.findIndex((p) => p.id === playerId);
-    if (index === -1) {
+    const player = this.#findPlayer(playerId);
+    if (!player) {
       throw new RangeError(`player ${playerId} not found`);
     }
-    this.#data.players.splice(index, 1);
+    this.#withdrawn.add(playerId);
   }
 }
 
