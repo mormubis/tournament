@@ -199,6 +199,10 @@ class Tournament {
     );
   }
 
+  #findPlayer(id: string): Player | undefined {
+    return this.#data.players.find((p) => p.id === id);
+  }
+
   /**
    * Adds a point adjustment (penalty, bonus). Affects standings.
    * Logs a comment in metadata.
@@ -208,6 +212,10 @@ class Tournament {
       this.#data.adjustments = [];
     }
     this.#data.adjustments.push(adjustment);
+    const player = this.#findPlayer(adjustment.playerId);
+    if (player) {
+      player.points += adjustment.points;
+    }
     this.#addComment(
       `point adjustment: ${adjustment.points > 0 ? '+' : ''}${adjustment.points} for ${adjustment.playerId}${adjustment.reason ? ` (${adjustment.reason})` : ''}`,
     );
@@ -226,6 +234,8 @@ class Tournament {
       throw new RangeError('invalid round number');
     }
 
+    const scoring = this.#data.scoringSystem ?? FIDE_SCORING;
+
     // Current round
     if (this.#currentRound && round === this.#completedRounds.length + 1) {
       const index = this.#findGameIndex(this.#currentRound.games, white, black);
@@ -234,6 +244,14 @@ class Tournament {
         throw new RangeError(
           `no game found for ${white} vs ${black} in round ${round}`,
         );
+      }
+      const whitePlayer = this.#findPlayer(entry.white);
+      const blackPlayer = this.#findPlayer(entry.black);
+      if (whitePlayer) {
+        whitePlayer.points -= scoreForGame(entry, 'white', scoring);
+      }
+      if (blackPlayer) {
+        blackPlayer.points -= scoreForGame(entry, 'black', scoring);
       }
       this.#currentRound.games[index] = {
         black: entry.black,
@@ -254,6 +272,16 @@ class Tournament {
         `no game found for ${white} vs ${black} in round ${round}`,
       );
     }
+    if (isGame(existing)) {
+      const whitePlayer = this.#findPlayer(existing.white);
+      const blackPlayer = this.#findPlayer(existing.black);
+      if (whitePlayer) {
+        whitePlayer.points -= scoreForGame(existing, 'white', scoring);
+      }
+      if (blackPlayer) {
+        blackPlayer.points -= scoreForGame(existing, 'black', scoring);
+      }
+    }
     completedRound.games[index] = {
       black: existing.black,
       white: existing.white,
@@ -273,6 +301,8 @@ class Tournament {
       throw new RangeError('invalid round number');
     }
 
+    const scoring = this.#data.scoringSystem ?? FIDE_SCORING;
+
     // Current round
     if (this.#currentRound && round === this.#completedRounds.length + 1) {
       const index = this.#findGameIndex(
@@ -286,11 +316,30 @@ class Tournament {
           `no pairing found for ${game.white} vs ${game.black} in round ${round}`,
         );
       }
-      this.#currentRound.games[index] = {
+      if (isGame(existing)) {
+        const whitePlayer = this.#findPlayer(existing.white);
+        const blackPlayer = this.#findPlayer(existing.black);
+        if (whitePlayer) {
+          whitePlayer.points -= scoreForGame(existing, 'white', scoring);
+        }
+        if (blackPlayer) {
+          blackPlayer.points -= scoreForGame(existing, 'black', scoring);
+        }
+      }
+      const corrected: Game = {
         ...game,
         black: existing.black,
         white: existing.white,
       };
+      this.#currentRound.games[index] = corrected;
+      const whitePlayer = this.#findPlayer(corrected.white);
+      const blackPlayer = this.#findPlayer(corrected.black);
+      if (whitePlayer) {
+        whitePlayer.points += scoreForGame(corrected, 'white', scoring);
+      }
+      if (blackPlayer) {
+        blackPlayer.points += scoreForGame(corrected, 'black', scoring);
+      }
       this.#addComment(
         `result correction in round ${round}: ${game.white} vs ${game.black}`,
       );
@@ -313,11 +362,30 @@ class Tournament {
         `no game found for ${game.white} vs ${game.black} in round ${round}`,
       );
     }
-    completedRound.games[index] = {
+    if (isGame(existing)) {
+      const whitePlayer = this.#findPlayer(existing.white);
+      const blackPlayer = this.#findPlayer(existing.black);
+      if (whitePlayer) {
+        whitePlayer.points -= scoreForGame(existing, 'white', scoring);
+      }
+      if (blackPlayer) {
+        blackPlayer.points -= scoreForGame(existing, 'black', scoring);
+      }
+    }
+    const corrected: Game = {
       ...game,
       black: existing.black,
       white: existing.white,
     };
+    completedRound.games[index] = corrected;
+    const whitePlayer = this.#findPlayer(corrected.white);
+    const blackPlayer = this.#findPlayer(corrected.black);
+    if (whitePlayer) {
+      whitePlayer.points += scoreForGame(corrected, 'white', scoring);
+    }
+    if (blackPlayer) {
+      blackPlayer.points += scoreForGame(corrected, 'black', scoring);
+    }
     this.#addComment(
       `result correction in round ${round}: ${game.white} vs ${game.black}`,
     );
@@ -377,6 +445,14 @@ class Tournament {
       games: result.games.map((p) => ({ black: p.black, white: p.white })),
     };
 
+    const scoring = this.#data.scoringSystem ?? FIDE_SCORING;
+    for (const bye of result.byes) {
+      const player = this.#findPlayer(bye.player);
+      if (player) {
+        player.points += scoreForBye(bye, scoring);
+      }
+    }
+
     return result;
   }
 
@@ -405,11 +481,22 @@ class Tournament {
       );
     }
 
-    this.#currentRound.games[index] = {
+    const recorded: Game = {
       ...game,
       black: existing.black,
       white: existing.white,
     };
+    this.#currentRound.games[index] = recorded;
+
+    const scoring = this.#data.scoringSystem ?? FIDE_SCORING;
+    const whitePlayer = this.#findPlayer(recorded.white);
+    const blackPlayer = this.#findPlayer(recorded.black);
+    if (whitePlayer) {
+      whitePlayer.points += scoreForGame(recorded, 'white', scoring);
+    }
+    if (blackPlayer) {
+      blackPlayer.points += scoreForGame(recorded, 'black', scoring);
+    }
 
     // Auto-complete the round if all pairings have results
     if (this.#currentRound.games.every((entry) => isGame(entry))) {
