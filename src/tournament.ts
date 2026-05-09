@@ -15,6 +15,7 @@ import type {
   Standing,
   Tiebreak,
   TournamentData,
+  TournamentMetadata,
 } from './types.js';
 
 /** Hardcoded FIDE defaults for scoring fallback chains. */
@@ -178,6 +179,39 @@ class Tournament {
         );
       }
     }
+  }
+
+  /** All completed rounds. */
+  get completedRounds(): readonly CompletedRound[] {
+    return this.#completedRounds;
+  }
+
+  /** The current round in progress, if any. */
+  get currentRound(): Round | undefined {
+    return this.#currentRound;
+  }
+
+  /** Whether all rounds have been completed. */
+  get isComplete(): boolean {
+    return (
+      this.#completedRounds.length >= this.#data.totalRounds &&
+      this.#currentRound === undefined
+    );
+  }
+
+  /** Tournament metadata (report info, auto-logged comments). */
+  get metadata(): TournamentMetadata | undefined {
+    return this.#data.metadata;
+  }
+
+  /** All registered players (including withdrawn). */
+  get players(): readonly Player[] {
+    return this.#data.players;
+  }
+
+  /** Total number of rounds in the tournament. */
+  get totalRounds(): number {
+    return this.#data.totalRounds;
   }
 
   #addComment(comment: string): void {
@@ -405,22 +439,6 @@ class Tournament {
     }
     this.#data.players.push(player);
     this.#addComment(`late entry: ${player.id}`);
-  }
-
-  /**
-   * Restores a tournament from a serialized snapshot. The pairing system
-   * function must be re-provided since functions are not JSON-serializable.
-   */
-  static fromJSON(
-    data: TournamentData,
-    options: {
-      acceleration?: AccelerationMethod;
-      onWarning?: (message: string) => void;
-      pairingSystem: PairingSystem;
-      tiebreaks?: Record<string, Tiebreak>;
-    },
-  ): Tournament {
-    return new Tournament(data, options);
   }
 
   /**
