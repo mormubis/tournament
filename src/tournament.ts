@@ -134,6 +134,7 @@ class Tournament {
   readonly #onWarning?: (message: string) => void;
   readonly #pairingSystem: PairingSystem;
   readonly #tiebreakFns: Tiebreak[];
+  readonly #withdrawn: Set<string>;
 
   /**
    * Creates a new tournament.
@@ -160,6 +161,8 @@ class Tournament {
     this.#data = { ...data };
     this.#onWarning = options.onWarning;
     this.#pairingSystem = options.pairingSystem;
+
+    this.#withdrawn = new Set<string>();
 
     // Resolve tiebreak IDs to functions
     const tiebreakIds = data.tiebreaks ?? [];
@@ -435,10 +438,10 @@ class Tournament {
       throw new RangeError('current round has unrecorded results');
     }
 
-    const result = this.#pairingSystem(
-      this.#data.players,
-      this.#completedRounds,
+    const activePlayers = this.#data.players.filter(
+      (p) => !this.#withdrawn.has(p.id),
     );
+    const result = this.#pairingSystem(activePlayers, this.#completedRounds);
 
     this.#currentRound = {
       byes: result.byes,
@@ -597,11 +600,11 @@ class Tournament {
    * Player leaves. No longer paired (FIDE C.04.2 Art 3.2).
    */
   withdraw(playerId: string): void {
-    const index = this.#data.players.findIndex((p) => p.id === playerId);
-    if (index === -1) {
+    const player = this.#findPlayer(playerId);
+    if (!player) {
       throw new RangeError(`player ${playerId} not found`);
     }
-    this.#data.players.splice(index, 1);
+    this.#withdrawn.add(playerId);
   }
 }
 

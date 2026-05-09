@@ -604,14 +604,51 @@ describe('Tournament', () => {
   });
 
   describe('withdraw()', () => {
-    it('removes a player', () => {
-      const t = new Tournament(makeData(), {
-        pairingSystem: mockPairingSystem,
-      });
+    it('withdrawn player stays in players but is not paired', () => {
+      const t = new Tournament(
+        makeData({
+          players: [
+            { id: 'a', points: 0, rank: 1 },
+            { id: 'b', points: 0, rank: 2 },
+            { id: 'c', points: 0, rank: 3 },
+            { id: 'd', points: 0, rank: 4 },
+          ],
+          totalRounds: 3,
+        }),
+        { pairingSystem: mockPairingSystem },
+      );
+      pairAndRecordRound(t);
       t.withdraw('d');
       const json = t.toJSON();
-      expect(json.players).toHaveLength(3);
-      expect(json.players.find((p) => p.id === 'd')).toBeUndefined();
+      // Player stays in roster
+      expect(json.players).toHaveLength(4);
+      expect(json.players.find((p) => p.id === 'd')).toBeDefined();
+      // But is excluded from next pairing
+      const r2 = t.pair();
+      const pairedIds = [
+        ...r2.games.flatMap((g) => [g.white, g.black]),
+        ...r2.byes.map((b) => b.player),
+      ];
+      expect(pairedIds).not.toContain('d');
+    });
+
+    it('withdrawn player still appears in standings', () => {
+      const t = new Tournament(
+        makeData({
+          players: [
+            { id: 'a', points: 0, rank: 1 },
+            { id: 'b', points: 0, rank: 2 },
+            { id: 'c', points: 0, rank: 3 },
+            { id: 'd', points: 0, rank: 4 },
+          ],
+          totalRounds: 3,
+        }),
+        { pairingSystem: mockPairingSystem },
+      );
+      pairAndRecordRound(t);
+      t.withdraw('d');
+      const s = t.standings();
+      expect(s.find((x) => x.player === 'd')).toBeDefined();
     });
 
     it('throws RangeError for non-existent player', () => {
@@ -891,7 +928,9 @@ describe('Tournament', () => {
       pairAndRecordRound(t);
       t.withdraw('f');
       const json = t.toJSON();
-      expect(json.players).toHaveLength(5);
+      // Player stays in roster (tracking, not removing)
+      expect(json.players).toHaveLength(6);
+      expect(json.players.find((p) => p.id === 'f')).toBeDefined();
     });
   });
 });
