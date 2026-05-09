@@ -1,17 +1,25 @@
 export { bakuAcceleration } from './baku.js';
+export { FIDE_SCORING } from './scoring.js';
 export { Tournament } from './tournament.js';
 export type {
   AccelerationMethod,
+  AcceleratedRound,
   Bye,
+  CompletedRound,
   Game,
-  GameKind,
+  NationalRating,
   Pairing,
-  PairingResult,
   PairingSystem,
+  Pairings,
   Player,
-  Result,
+  PlayerAcceleration,
+  PointAdjustment,
+  ProhibitedPairing,
+  Round,
+  ScoringSystem,
   Standing,
+  Team,
   Tiebreak,
-  TournamentOptions,
-  TournamentSnapshot,
+  TournamentData,
+  TournamentMetadata,
 } from './types.js';

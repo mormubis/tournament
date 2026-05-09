@@ -1,262 +1,178 @@
 import { describe, expect, it } from 'vitest';
 
-import { bakuAcceleration } from '../baku.js';
+import { FIDE_SCORING } from '../scoring.js';
 import { Tournament } from '../tournament.js';
 
 import type {
   Bye,
   Game,
   Pairing,
-  PairingResult,
   PairingSystem,
+  Pairings,
   Player,
   Tiebreak,
+  TournamentData,
 } from '../types.js';
 
 const tiebreakFavorA: Tiebreak = (playerId) => (playerId === 'a' ? 1 : 0);
 const tiebreakConstant: Tiebreak = () => 42;
 
-const mockPairingSystem: PairingSystem = (players) => {
-  const pairings: Pairing[] = [];
+const mockPairingSystem: PairingSystem = (players): Pairings => {
+  const games: Pairing[] = [];
   for (let index = 0; index < players.length - 1; index += 2) {
-    pairings.push({
+    games.push({
       black: players[index + 1]!.id,
       white: players[index]!.id,
     });
   }
   const byes: Bye[] =
-    players.length % 2 === 0 ? [] : [{ player: players.at(-1)!.id }];
-  return { byes, pairings };
+    players.length % 2 === 0
+      ? []
+      : [{ kind: 'pairing', player: players.at(-1)!.id }];
+  return { byes, games };
 };
 
-const players: Player[] = [{ id: 'a' }, { id: 'b' }, { id: 'c' }, { id: 'd' }];
+const players: Player[] = [
+  { id: 'a', points: 0, rank: 1 },
+  { id: 'b', points: 0, rank: 2 },
+  { id: 'c', points: 0, rank: 3 },
+  { id: 'd', points: 0, rank: 4 },
+];
+
+function makeData(overrides?: Partial<TournamentData>): TournamentData {
+  return {
+    completedRounds: [],
+    players: [...players],
+    totalRounds: 3,
+    ...overrides,
+  };
+}
+
+function makeGame(
+  white: string,
+  black: string,
+  result: 'black' | 'draw' | 'white',
+): Game {
+  return { black, result, white };
+}
+
+const byePairingSystem: PairingSystem = (ps): Pairings => {
+  const games: Pairing[] = [];
+  const byes: Bye[] = [];
+  for (let index = 0; index < ps.length - 1; index += 2) {
+    games.push({ black: ps[index + 1]!.id, white: ps[index]!.id });
+  }
+  if (ps.length % 2 !== 0) {
+    byes.push({ kind: 'half', player: ps.at(-1)!.id });
+  }
+  return { byes, games };
+};
+
+/** Helper: pair a round, record all results as white wins, return the tournament. */
+function pairAndRecordRound(t: Tournament): Pairings {
+  const pairings = t.pair();
+  for (const p of pairings.games) {
+    t.record(makeGame(p.white, p.black, 'white'));
+  }
+  return pairings;
+}
 
 describe('Tournament', () => {
   describe('constructor', () => {
-    it('creates a tournament with valid options', () => {
-      const t = new Tournament({
+    it('creates a tournament with valid data', () => {
+      const t = new Tournament(makeData(), {
         pairingSystem: mockPairingSystem,
-        players,
-        rounds: 3,
       });
-      expect(t.rounds).toBe(3);
-      expect(t.players).toHaveLength(4);
-    });
-
-    it('throws RangeError for fewer than 2 players', () => {
-      expect(
-        () =>
-          new Tournament({
-            pairingSystem: mockPairingSystem,
-            players: [{ id: 'a' }],
-            rounds: 1,
-          }),
-      ).toThrow(RangeError);
-    });
-
-    it('throws RangeError for fewer than 1 round', () => {
-      expect(
-        () =>
-          new Tournament({
-            pairingSystem: mockPairingSystem,
-            players,
-            rounds: 0,
-          }),
-      ).toThrow(RangeError);
+      expect(t).toBeInstanceOf(Tournament);
     });
   });
 
-  describe('getters', () => {
-    it('players returns the registered players', () => {
-      const t = new Tournament({
-        pairingSystem: mockPairingSystem,
-        players,
-        rounds: 1,
-      });
-      expect(t.players).toEqual(players);
-    });
-
-    it('rounds returns total round count', () => {
-      const t = new Tournament({
-        pairingSystem: mockPairingSystem,
-        players,
-        rounds: 5,
-      });
-      expect(t.rounds).toBe(5);
-    });
-
-    it('currentRound starts at 0', () => {
-      const t = new Tournament({
-        pairingSystem: mockPairingSystem,
-        players,
-        rounds: 3,
-      });
-      expect(t.currentRound).toBe(0);
-    });
-
-    it('games starts empty', () => {
-      const t = new Tournament({
-        pairingSystem: mockPairingSystem,
-        players,
-        rounds: 3,
-      });
-      expect(t.games).toHaveLength(0);
-    });
-
-    it('isComplete starts as false', () => {
-      const t = new Tournament({
-        pairingSystem: mockPairingSystem,
-        players,
-        rounds: 3,
-      });
-      expect(t.isComplete).toBe(false);
-    });
-
-    it('tiebreaks defaults to empty array', () => {
-      const t = new Tournament({
-        pairingSystem: mockPairingSystem,
-        players,
-        rounds: 3,
-      });
-      expect(t.tiebreaks).toEqual([]);
-    });
-
-    it('tiebreaks returns the configured IDs', () => {
-      const t = new Tournament({
-        pairingSystem: mockPairingSystem,
-        players,
-        rounds: 3,
-        tiebreaks: ['buchholz', 'sonneborn-berger'],
-      });
-      expect(t.tiebreaks).toEqual(['buchholz', 'sonneborn-berger']);
-    });
-
-    it('tiebreaks returns a defensive copy', () => {
-      const t = new Tournament({
-        pairingSystem: mockPairingSystem,
-        players,
-        rounds: 3,
-        tiebreaks: ['buchholz'],
-      });
-      const copy = t.tiebreaks;
-      (copy as string[]).push('extra');
-      expect(t.tiebreaks).toEqual(['buchholz']);
-    });
-  });
-
-  describe('pairRound()', () => {
+  describe('pair()', () => {
     it('returns pairings for round 1', () => {
-      const t = new Tournament({
+      const t = new Tournament(makeData(), {
         pairingSystem: mockPairingSystem,
-        players,
-        rounds: 3,
       });
-      const result = t.pairRound();
-      expect(result.pairings).toHaveLength(2);
+      const result = t.pair();
+      expect(result.games).toHaveLength(2);
       expect(result.byes).toHaveLength(0);
     });
 
-    it('advances currentRound to 1', () => {
-      const t = new Tournament({
-        pairingSystem: mockPairingSystem,
-        players,
-        rounds: 3,
-      });
-      t.pairRound();
-      expect(t.currentRound).toBe(1);
-    });
-
     it('throws RangeError when tournament is complete', () => {
-      const t = new Tournament({
+      const t = new Tournament(makeData({ totalRounds: 1 }), {
         pairingSystem: mockPairingSystem,
-        players,
-        rounds: 1,
       });
-      const result = t.pairRound();
-      for (const pairing of result.pairings) {
-        t.recordResult({
-          black: pairing.black,
-          result: 1,
-          white: pairing.white,
-        });
-      }
-      expect(() => t.pairRound()).toThrow(RangeError);
+      pairAndRecordRound(t);
+      expect(() => t.pair()).toThrow(RangeError);
     });
 
     it('throws RangeError when current round has unrecorded results', () => {
-      const t = new Tournament({
+      const t = new Tournament(makeData(), {
         pairingSystem: mockPairingSystem,
-        players,
-        rounds: 3,
       });
-      t.pairRound();
+      t.pair();
       // Don't record results — pair again should throw
-      expect(() => t.pairRound()).toThrow(RangeError);
+      expect(() => t.pair()).toThrow(RangeError);
     });
   });
 
-  describe('recordResult()', () => {
+  describe('record()', () => {
     it('records a game result', () => {
-      const t = new Tournament({
+      const t = new Tournament(makeData(), {
         pairingSystem: mockPairingSystem,
-        players,
-        rounds: 3,
       });
-      t.pairRound();
-      t.recordResult({ black: 'b', result: 1, white: 'a' });
-      expect(t.games[0]).toHaveLength(1);
+      t.pair();
+      t.record(makeGame('a', 'b', 'white'));
+      // Round should not be auto-completed yet (only 1 of 2 games recorded)
+      const json = t.toJSON();
+      expect(json.currentRound).toBeDefined();
+      expect(json.currentRound!.games).toHaveLength(2);
+    });
+
+    it('auto-completes the round when all results are recorded', () => {
+      const t = new Tournament(makeData(), {
+        pairingSystem: mockPairingSystem,
+      });
+      pairAndRecordRound(t);
+      const json = t.toJSON();
+      expect(json.currentRound).toBeUndefined();
+      expect(json.completedRounds).toHaveLength(1);
     });
 
     it('throws RangeError for a non-existent pairing', () => {
-      const t = new Tournament({
+      const t = new Tournament(makeData(), {
         pairingSystem: mockPairingSystem,
-        players,
-        rounds: 3,
       });
-      t.pairRound();
-      expect(() =>
-        t.recordResult({ black: 'z', result: 1, white: 'x' }),
-      ).toThrow(RangeError);
+      t.pair();
+      expect(() => t.record(makeGame('x', 'z', 'white'))).toThrow(RangeError);
     });
 
     it('throws RangeError when no round has been paired yet', () => {
-      const t = new Tournament({
+      const t = new Tournament(makeData(), {
         pairingSystem: mockPairingSystem,
-        players,
-        rounds: 3,
       });
-      expect(() =>
-        t.recordResult({ black: 'b', result: 1, white: 'a' }),
-      ).toThrow(RangeError);
+      expect(() => t.record(makeGame('a', 'b', 'white'))).toThrow(RangeError);
     });
 
     it('games accumulate across rounds', () => {
-      const t = new Tournament({
+      const t = new Tournament(makeData(), {
         pairingSystem: mockPairingSystem,
-        players,
-        rounds: 3,
       });
+      pairAndRecordRound(t);
+      pairAndRecordRound(t);
 
-      const r1 = t.pairRound();
-      for (const p of r1.pairings) {
-        t.recordResult({ black: p.black, result: 0.5, white: p.white });
-      }
-
-      const r2 = t.pairRound();
-      for (const p of r2.pairings) {
-        t.recordResult({ black: p.black, result: 0.5, white: p.white });
-      }
-
-      expect(t.games.flat()).toHaveLength(4);
+      const json = t.toJSON();
+      const totalGames = json.completedRounds.reduce(
+        (sum, r) => sum + r.games.length,
+        0,
+      );
+      expect(totalGames).toBe(4);
     });
   });
 
   describe('standings()', () => {
-    it('returns empty array when no players (all score 0)', () => {
-      const t = new Tournament({
+    it('returns all players with score 0 before any games', () => {
+      const t = new Tournament(makeData({ totalRounds: 1 }), {
         pairingSystem: mockPairingSystem,
-        players,
-        rounds: 1,
       });
       const s = t.standings();
       expect(s).toHaveLength(4);
@@ -264,16 +180,10 @@ describe('Tournament', () => {
     });
 
     it('computes scores from recorded games', () => {
-      const t = new Tournament({
+      const t = new Tournament(makeData({ totalRounds: 1 }), {
         pairingSystem: mockPairingSystem,
-        players,
-        rounds: 1,
       });
-      const r1 = t.pairRound();
-      // pairings: a vs b, c vs d — white wins each
-      for (const p of r1.pairings) {
-        t.recordResult({ black: p.black, result: 1, white: p.white });
-      }
+      pairAndRecordRound(t);
       const s = t.standings();
       const a = s.find((x) => x.player === 'a')!;
       const b = s.find((x) => x.player === 'b')!;
@@ -282,28 +192,28 @@ describe('Tournament', () => {
     });
 
     it('ranks players by score descending', () => {
-      const t = new Tournament({
+      const t = new Tournament(makeData({ totalRounds: 1 }), {
         pairingSystem: mockPairingSystem,
-        players,
-        rounds: 1,
       });
-      const r1 = t.pairRound();
-      for (const p of r1.pairings) {
-        t.recordResult({ black: p.black, result: 1, white: p.white });
-      }
+      pairAndRecordRound(t);
       const s = t.standings();
       expect(s[0]!.rank).toBe(1);
       expect(s[0]!.score).toBeGreaterThanOrEqual(s[1]!.score);
     });
 
     it('applies tiebreak functions in order', () => {
-      const t = new Tournament({
-        pairingSystem: mockPairingSystem,
-        players: [{ id: 'a' }, { id: 'b' }],
-        rounds: 1,
-      });
-      t.pairRound();
-      t.recordResult({ black: 'b', result: 0.5, white: 'a' });
+      const t = new Tournament(
+        makeData({
+          players: [
+            { id: 'a', points: 0, rank: 1 },
+            { id: 'b', points: 0, rank: 2 },
+          ],
+          totalRounds: 1,
+        }),
+        { pairingSystem: mockPairingSystem },
+      );
+      t.pair();
+      t.record(makeGame('a', 'b', 'draw'));
       // Both have score 0.5; tiebreak returns higher value for 'a'
       const s = t.standings([tiebreakFavorA]);
       expect(s[0]!.player).toBe('a');
@@ -312,798 +222,498 @@ describe('Tournament', () => {
     });
 
     it('assigns same rank to tied players', () => {
-      const t = new Tournament({
-        pairingSystem: mockPairingSystem,
-        players: [{ id: 'a' }, { id: 'b' }],
-        rounds: 1,
-      });
-      t.pairRound();
-      t.recordResult({ black: 'b', result: 0.5, white: 'a' });
-      const s = t.standings(); // no tiebreaks → tied
+      const t = new Tournament(
+        makeData({
+          players: [
+            { id: 'a', points: 0, rank: 1 },
+            { id: 'b', points: 0, rank: 2 },
+          ],
+          totalRounds: 1,
+        }),
+        { pairingSystem: mockPairingSystem },
+      );
+      t.pair();
+      t.record(makeGame('a', 'b', 'draw'));
+      const s = t.standings(); // no tiebreaks - tied
       expect(s[0]!.rank).toBe(1);
       expect(s[1]!.rank).toBe(1);
     });
 
     it('works with no tiebreaks argument', () => {
-      const t = new Tournament({
+      const t = new Tournament(makeData({ totalRounds: 1 }), {
         pairingSystem: mockPairingSystem,
-        players,
-        rounds: 1,
       });
       expect(() => t.standings()).not.toThrow();
       expect(t.standings()).toHaveLength(4);
     });
 
     it('populates tiebreak values in standing entries', () => {
-      const t = new Tournament({
-        pairingSystem: mockPairingSystem,
-        players: [{ id: 'a' }, { id: 'b' }],
-        rounds: 1,
-      });
-      t.pairRound();
-      t.recordResult({ black: 'b', result: 1, white: 'a' });
+      const t = new Tournament(
+        makeData({
+          players: [
+            { id: 'a', points: 0, rank: 1 },
+            { id: 'b', points: 0, rank: 2 },
+          ],
+          totalRounds: 1,
+        }),
+        { pairingSystem: mockPairingSystem },
+      );
+      t.pair();
+      t.record(makeGame('a', 'b', 'white'));
       const s = t.standings([tiebreakConstant]);
       expect(s[0]!.tiebreaks).toEqual([42]);
+    });
+
+    it('includes bye points in standings', () => {
+      const t = new Tournament(
+        makeData({
+          players: [
+            { id: 'a', points: 0, rank: 1 },
+            { id: 'b', points: 0, rank: 2 },
+            { id: 'c', points: 0, rank: 3 },
+          ],
+          totalRounds: 1,
+        }),
+        { pairingSystem: byePairingSystem },
+      );
+      const pairings = t.pair();
+      for (const p of pairings.games) {
+        t.record(makeGame(p.white, p.black, 'draw'));
+      }
+      const s = t.standings();
+      const c = s.find((x) => x.player === 'c')!;
+      expect(c.score).toBe(0.5); // half-bye
+    });
+
+    it('includes point adjustments in standings', () => {
+      const t = new Tournament(
+        makeData({
+          adjustments: [{ playerId: 'a', points: -0.5, round: 0 }],
+          totalRounds: 1,
+        }),
+        { pairingSystem: mockPairingSystem },
+      );
+      pairAndRecordRound(t);
+      const s = t.standings();
+      const a = s.find((x) => x.player === 'a')!;
+      expect(a.score).toBe(0.5); // 1 (win) - 0.5 (adjustment)
+    });
+  });
+
+  describe('correct()', () => {
+    it('corrects a result in a completed round', () => {
+      const t = new Tournament(makeData({ totalRounds: 2 }), {
+        pairingSystem: mockPairingSystem,
+      });
+      pairAndRecordRound(t);
+      pairAndRecordRound(t);
+      // Correct round 1 result
+      t.correct(1, makeGame('a', 'b', 'black'));
+      const json = t.toJSON();
+      const game = json.completedRounds[0]!.games.find(
+        (g) => g.white === 'a' && g.black === 'b',
+      );
+      expect(game!.result).toBe('black');
+    });
+
+    it('logs a comment on correction', () => {
+      const t = new Tournament(makeData({ totalRounds: 1 }), {
+        pairingSystem: mockPairingSystem,
+      });
+      pairAndRecordRound(t);
+      t.correct(1, makeGame('a', 'b', 'draw'));
+      const json = t.toJSON();
+      expect(json.metadata?.comments).toBeDefined();
+      expect(json.metadata!.comments!.length).toBeGreaterThan(0);
+    });
+
+    it('throws RangeError for invalid round', () => {
+      const t = new Tournament(makeData({ totalRounds: 1 }), {
+        pairingSystem: mockPairingSystem,
+      });
+      pairAndRecordRound(t);
+      expect(() => t.correct(0, makeGame('a', 'b', 'draw'))).toThrow(
+        RangeError,
+      );
+    });
+
+    it('throws RangeError for non-existent pairing', () => {
+      const t = new Tournament(makeData({ totalRounds: 1 }), {
+        pairingSystem: mockPairingSystem,
+      });
+      pairAndRecordRound(t);
+      expect(() => t.correct(1, makeGame('x', 'y', 'draw'))).toThrow(
+        RangeError,
+      );
+    });
+
+    it('standings reflect the corrected result', () => {
+      const t = new Tournament(
+        makeData({
+          players: [
+            { id: 'a', points: 0, rank: 1 },
+            { id: 'b', points: 0, rank: 2 },
+          ],
+          totalRounds: 1,
+        }),
+        { pairingSystem: mockPairingSystem },
+      );
+      t.pair();
+      t.record(makeGame('a', 'b', 'white')); // a wins
+      expect(t.standings().find((s) => s.player === 'a')!.score).toBe(1);
+
+      t.correct(1, makeGame('a', 'b', 'black')); // change to b wins
+      expect(t.standings().find((s) => s.player === 'a')!.score).toBe(0);
+      expect(t.standings().find((s) => s.player === 'b')!.score).toBe(1);
+    });
+  });
+
+  describe('clear()', () => {
+    it('clears a result in a completed round', () => {
+      const t = new Tournament(makeData({ totalRounds: 1 }), {
+        pairingSystem: mockPairingSystem,
+      });
+      pairAndRecordRound(t);
+      t.clear(1, 'a', 'b');
+      const json = t.toJSON();
+      const game = json.completedRounds[0]!.games.find(
+        (g) => g.white === 'a' && g.black === 'b',
+      );
+      // Should be reverted to a pairing (no result)
+      expect(game).toBeDefined();
+      expect('result' in game! && typeof game!.result === 'string').toBe(false);
+    });
+
+    it('throws RangeError for round 0', () => {
+      const t = new Tournament(makeData({ totalRounds: 1 }), {
+        pairingSystem: mockPairingSystem,
+      });
+      pairAndRecordRound(t);
+      expect(() => t.clear(0, 'a', 'b')).toThrow(RangeError);
+    });
+
+    it('throws RangeError for invalid round', () => {
+      const t = new Tournament(makeData({ totalRounds: 1 }), {
+        pairingSystem: mockPairingSystem,
+      });
+      pairAndRecordRound(t);
+      expect(() => t.clear(5, 'a', 'b')).toThrow(RangeError);
+    });
+  });
+
+  describe('enter()', () => {
+    it('adds a new player', () => {
+      const t = new Tournament(makeData(), {
+        pairingSystem: mockPairingSystem,
+      });
+      t.enter({ id: 'e', points: 0, rank: 5 });
+      const json = t.toJSON();
+      expect(json.players).toHaveLength(5);
+      expect(json.players.find((p) => p.id === 'e')).toBeDefined();
+    });
+
+    it('logs a comment on late entry', () => {
+      const t = new Tournament(makeData(), {
+        pairingSystem: mockPairingSystem,
+      });
+      t.enter({ id: 'e', points: 0, rank: 5 });
+      const json = t.toJSON();
+      expect(json.metadata?.comments).toBeDefined();
+      expect(
+        json.metadata!.comments!.some((c) => c.includes('late entry')),
+      ).toBe(true);
+    });
+
+    it('throws RangeError for duplicate player', () => {
+      const t = new Tournament(makeData(), {
+        pairingSystem: mockPairingSystem,
+      });
+      expect(() => t.enter({ id: 'a', points: 0, rank: 5 })).toThrow(
+        RangeError,
+      );
+    });
+  });
+
+  describe('withdraw()', () => {
+    it('removes a player', () => {
+      const t = new Tournament(makeData(), {
+        pairingSystem: mockPairingSystem,
+      });
+      t.withdraw('d');
+      const json = t.toJSON();
+      expect(json.players).toHaveLength(3);
+      expect(json.players.find((p) => p.id === 'd')).toBeUndefined();
+    });
+
+    it('throws RangeError for non-existent player', () => {
+      const t = new Tournament(makeData(), {
+        pairingSystem: mockPairingSystem,
+      });
+      expect(() => t.withdraw('z')).toThrow(RangeError);
+    });
+  });
+
+  describe('adjust()', () => {
+    it('adds a point adjustment', () => {
+      const t = new Tournament(makeData(), {
+        pairingSystem: mockPairingSystem,
+      });
+      t.adjust({ playerId: 'a', points: -1, round: 0 });
+      const json = t.toJSON();
+      expect(json.adjustments).toHaveLength(1);
+      expect(json.adjustments![0]!.points).toBe(-1);
+    });
+
+    it('logs a comment on adjustment', () => {
+      const t = new Tournament(makeData(), {
+        pairingSystem: mockPairingSystem,
+      });
+      t.adjust({ playerId: 'a', points: -1, reason: 'late', round: 1 });
+      const json = t.toJSON();
+      expect(json.metadata?.comments).toBeDefined();
+      expect(
+        json.metadata!.comments!.some((c) => c.includes('point adjustment')),
+      ).toBe(true);
     });
   });
 
   describe('serialization', () => {
     it('toJSON returns a plain serializable object', () => {
-      const t = new Tournament({
+      const t = new Tournament(makeData({ totalRounds: 2 }), {
         pairingSystem: mockPairingSystem,
-        players,
-        rounds: 2,
       });
-      const r1 = t.pairRound();
-      for (const p of r1.pairings) {
-        t.recordResult({ black: p.black, result: 1, white: p.white });
-      }
+      pairAndRecordRound(t);
       const json = t.toJSON();
-      expect(json.currentRound).toBe(1);
-      expect(json.games.flat()).toHaveLength(2);
-      expect(json.rounds).toBe(2);
+      expect(json.completedRounds).toHaveLength(1);
+      expect(json.completedRounds[0]!.games).toHaveLength(2);
+      expect(json.totalRounds).toBe(2);
       // eslint-disable-next-line unicorn/prefer-structured-clone
       expect(JSON.parse(JSON.stringify(json))).toEqual(json);
     });
 
     it('fromJSON restores tournament state', () => {
-      const t = new Tournament({
+      const t = new Tournament(makeData({ totalRounds: 2 }), {
         pairingSystem: mockPairingSystem,
-        players,
-        rounds: 2,
       });
-      const r1 = t.pairRound();
-      for (const p of r1.pairings) {
-        t.recordResult({ black: p.black, result: 1, white: p.white });
-      }
+      pairAndRecordRound(t);
       const json = t.toJSON();
-      const restored = Tournament.fromJSON(json, mockPairingSystem);
-      expect(restored.currentRound).toBe(t.currentRound);
-      expect(restored.games).toEqual(t.games);
-      expect(restored.rounds).toBe(t.rounds);
-      expect(restored.players).toEqual(t.players);
+      const restored = Tournament.fromJSON(json, {
+        pairingSystem: mockPairingSystem,
+      });
+      expect(restored.toJSON()).toEqual(json);
     });
 
     it('restored tournament can continue pairing', () => {
-      const t = new Tournament({
+      const t = new Tournament(makeData({ totalRounds: 2 }), {
         pairingSystem: mockPairingSystem,
-        players,
-        rounds: 2,
       });
-      const r1 = t.pairRound();
-      for (const p of r1.pairings) {
-        t.recordResult({ black: p.black, result: 1, white: p.white });
-      }
-      const restored = Tournament.fromJSON(t.toJSON(), mockPairingSystem);
-      expect(() => restored.pairRound()).not.toThrow();
-      expect(restored.currentRound).toBe(2);
+      pairAndRecordRound(t);
+      const restored = Tournament.fromJSON(t.toJSON(), {
+        pairingSystem: mockPairingSystem,
+      });
+      expect(() => restored.pair()).not.toThrow();
     });
 
     it('round-trips preserve all state', () => {
-      const t = new Tournament({
+      const t = new Tournament(makeData({ totalRounds: 2 }), {
         pairingSystem: mockPairingSystem,
-        players,
-        rounds: 2,
       });
-      const r1 = t.pairRound();
-      for (const p of r1.pairings) {
-        t.recordResult({ black: p.black, result: 0.5, white: p.white });
-      }
+      pairAndRecordRound(t);
       const snap1 = t.toJSON();
-      const restored = Tournament.fromJSON(snap1, mockPairingSystem);
+      const restored = Tournament.fromJSON(snap1, {
+        pairingSystem: mockPairingSystem,
+      });
       const snap2 = restored.toJSON();
       expect(snap2).toEqual(snap1);
     });
 
     it('toJSON includes tiebreaks when configured', () => {
-      const t = new Tournament({
-        pairingSystem: mockPairingSystem,
-        players,
-        rounds: 2,
-        tiebreaks: ['buchholz', 'sonneborn-berger'],
-      });
+      const t = new Tournament(
+        makeData({
+          tiebreaks: ['buchholz', 'sonneborn-berger'],
+          totalRounds: 2,
+        }),
+        { pairingSystem: mockPairingSystem },
+      );
       const json = t.toJSON();
       expect(json.tiebreaks).toEqual(['buchholz', 'sonneborn-berger']);
     });
 
-    it('toJSON omits tiebreaks when empty', () => {
-      const t = new Tournament({
+    it('serialization round-trip preserves corrected results', () => {
+      const t = new Tournament(makeData({ totalRounds: 2 }), {
         pairingSystem: mockPairingSystem,
-        players,
-        rounds: 2,
       });
-      const json = t.toJSON();
-      expect(json.tiebreaks).toBeUndefined();
-    });
+      pairAndRecordRound(t);
+      t.correct(1, makeGame('a', 'b', 'black'));
 
-    it('fromJSON restores tiebreak IDs', () => {
-      const t = new Tournament({
+      const snap = t.toJSON();
+      const restored = Tournament.fromJSON(snap, {
         pairingSystem: mockPairingSystem,
-        players,
-        rounds: 2,
-        tiebreaks: ['buchholz'],
       });
-      const restored = Tournament.fromJSON(t.toJSON(), mockPairingSystem);
-      expect(restored.tiebreaks).toEqual(['buchholz']);
-    });
-
-    it('fromJSON handles snapshots without tiebreaks', () => {
-      const snapshot = {
-        currentRound: 0,
-        games: [],
-        players,
-        roundPairings: {},
-        rounds: 2,
-      };
-      const restored = Tournament.fromJSON(snapshot, mockPairingSystem);
-      expect(restored.tiebreaks).toEqual([]);
+      const restoredGame = restored
+        .toJSON()
+        .completedRounds[0]!.games.find(
+          (g) => g.white === 'a' && g.black === 'b',
+        );
+      expect(restoredGame!.result).toBe('black');
     });
   });
 
-  describe('acceleration integration', () => {
-    it('virtual points affect pairing system input but not stored games', () => {
-      const acceleratedPlayers: Player[] = [
-        { id: 'a' },
-        { id: 'b' },
-        { id: 'c' },
-        { id: 'd' },
-      ];
-      // gaSize = 2 * ceil(4/4) = 2 → GA = [a, b], GB = [c, d]
-      const acceleration = bakuAcceleration(acceleratedPlayers);
-
-      let capturedGames: Game[][] = [];
-      const spyPairingSystem: PairingSystem = (
-        spyPlayers,
-        games,
-      ): PairingResult => {
-        capturedGames = [...games];
-        const pairings: Pairing[] = [];
-        for (let index = 0; index < spyPlayers.length - 1; index += 2) {
-          pairings.push({
-            black: spyPlayers[index + 1]!.id,
-            white: spyPlayers[index]!.id,
-          });
-        }
-        return { byes: [], pairings };
-      };
-
-      const t = new Tournament({
-        acceleration,
-        pairingSystem: spyPairingSystem,
-        players: acceleratedPlayers,
-        rounds: 9,
+  describe('Game type', () => {
+    it('accepts a played game with rated flag', () => {
+      const t = new Tournament(makeData({ totalRounds: 1 }), {
+        pairingSystem: mockPairingSystem,
       });
-
-      t.pairRound();
-
-      // Virtual games are prepended as extra round (index 0)
-      const virtualGames = capturedGames[0] ?? [];
-      expect(virtualGames.length).toBeGreaterThan(0);
-
-      // GA players (a, b) each have a virtual game with 1 virtual point (round 1 of 9)
-      const virtualForA = virtualGames.find((g) => g.white === 'a');
-      expect(virtualForA).toBeDefined();
-      expect(virtualForA?.result).toBe(1);
-
-      // GB players (c, d) have no virtual games
-      expect(virtualGames.some((g) => g.white === 'c')).toBe(false);
-      expect(virtualGames.some((g) => g.white === 'd')).toBe(false);
-
-      // tournament.games does NOT contain virtual games — round array is empty
-      expect(t.games.flat()).toHaveLength(0);
+      t.pair();
+      expect(() =>
+        t.record({ black: 'b', rated: true, result: 'white', white: 'a' }),
+      ).not.toThrow();
     });
 
-    it('works end-to-end with acceleration', () => {
-      const acceleratedPlayers: Player[] = [
-        { id: 'a' },
-        { id: 'b' },
-        { id: 'c' },
-        { id: 'd' },
-      ];
-      const acceleration = bakuAcceleration(acceleratedPlayers);
-
-      const t = new Tournament({
-        acceleration,
+    it('accepts forfeit game', () => {
+      const t = new Tournament(makeData({ totalRounds: 1 }), {
         pairingSystem: mockPairingSystem,
-        players: acceleratedPlayers,
-        rounds: 3,
       });
+      t.pair();
+      expect(() =>
+        t.record({
+          black: 'b',
+          forfeit: 'black',
+          result: 'white',
+          white: 'a',
+        }),
+      ).not.toThrow();
+    });
 
-      // Pair and record all 3 rounds
-      for (let round = 0; round < 3; round++) {
-        const result = t.pairRound();
-        for (const p of result.pairings) {
-          t.recordResult({ black: p.black, result: 1, white: p.white });
-        }
-      }
+    it('accepts double forfeit', () => {
+      const t = new Tournament(makeData({ totalRounds: 1 }), {
+        pairingSystem: mockPairingSystem,
+      });
+      t.pair();
+      expect(() =>
+        t.record({
+          black: 'b',
+          forfeit: 'both',
+          result: 'none',
+          white: 'a',
+        }),
+      ).not.toThrow();
+    });
+  });
 
-      expect(t.isComplete).toBe(true);
-      expect(t.currentRound).toBe(3);
-
+  describe('ScoringSystem', () => {
+    it('uses custom scoring system', () => {
+      const t = new Tournament(
+        makeData({
+          players: [
+            { id: 'a', points: 0, rank: 1 },
+            { id: 'b', points: 0, rank: 2 },
+          ],
+          scoringSystem: { draw: 0.3, loss: 0, win: 3 },
+          totalRounds: 1,
+        }),
+        { pairingSystem: mockPairingSystem },
+      );
+      t.pair();
+      t.record(makeGame('a', 'b', 'white'));
       const s = t.standings();
-      expect(s).toHaveLength(4);
-      // All scores should be non-negative and sum correctly
-      const totalScore = s.reduce((sum, entry) => sum + entry.score, 0);
-      // 3 rounds × 2 games per round × 1 point per game = 6 total points
-      expect(totalScore).toBe(6);
+      expect(s.find((x) => x.player === 'a')!.score).toBe(3);
+      expect(s.find((x) => x.player === 'b')!.score).toBe(0);
+    });
 
-      // Games stored are only real games (no virtual)
-      expect(t.games.flat()).toHaveLength(6);
+    it('uses FIDE defaults when no scoring system specified', () => {
+      const t = new Tournament(
+        makeData({
+          players: [
+            { id: 'a', points: 0, rank: 1 },
+            { id: 'b', points: 0, rank: 2 },
+          ],
+          totalRounds: 1,
+        }),
+        { pairingSystem: mockPairingSystem },
+      );
+      t.pair();
+      t.record(makeGame('a', 'b', 'draw'));
+      const s = t.standings();
+      expect(s.find((x) => x.player === 'a')!.score).toBe(0.5);
+      expect(s.find((x) => x.player === 'b')!.score).toBe(0.5);
     });
   });
 
-  describe('updateResult()', () => {
-    it('replaces a result in the current round', () => {
-      const t = new Tournament({
-        pairingSystem: mockPairingSystem,
-        players,
-        rounds: 3,
-      });
-      const r1 = t.pairRound();
-      // Record white wins
-      for (const p of r1.pairings) {
-        t.recordResult({ black: p.black, result: 1, white: p.white });
-      }
-      // Update first pairing to a draw
-      const first = r1.pairings[0]!;
-      t.updateResult(1, {
-        black: first.black,
-        result: 0.5,
-        white: first.white,
-      });
-      const updatedGame = t.games[0]!.find(
-        (g) => g.white === first.white && g.black === first.black,
-      );
-      expect(updatedGame!.result).toBe(0.5);
-      // Total game count unchanged (replaced, not appended)
-      expect(t.games[0]).toHaveLength(2);
-    });
-
-    it('replaces a result in a past round', () => {
-      const t = new Tournament({
-        pairingSystem: mockPairingSystem,
-        players,
-        rounds: 3,
-      });
-      // Complete round 1
-      const r1 = t.pairRound();
-      for (const p of r1.pairings) {
-        t.recordResult({ black: p.black, result: 1, white: p.white });
-      }
-      // Complete round 2
-      const r2 = t.pairRound();
-      for (const p of r2.pairings) {
-        t.recordResult({ black: p.black, result: 1, white: p.white });
-      }
-      // Update round 1 result
-      const first = r1.pairings[0]!;
-      t.updateResult(1, { black: first.black, result: 0, white: first.white });
-      const updatedGame = t.games[0]!.find(
-        (g) => g.white === first.white && g.black === first.black,
-      );
-      expect(updatedGame!.result).toBe(0);
-    });
-
-    it('finds the game when white/black are swapped in input', () => {
-      const t = new Tournament({
-        pairingSystem: mockPairingSystem,
-        players,
-        rounds: 3,
-      });
-      const r1 = t.pairRound();
-      for (const p of r1.pairings) {
-        t.recordResult({ black: p.black, result: 1, white: p.white });
-      }
-      // Update with swapped colors — should still find the game
-      const first = r1.pairings[0]!;
-      t.updateResult(1, {
-        black: first.white,
-        result: 0,
-        white: first.black,
-      });
-      // The stored game retains its original color assignment
-      const updatedGame = t.games[0]!.find(
-        (g) => g.white === first.white && g.black === first.black,
-      );
-      expect(updatedGame).toBeDefined();
-      expect(updatedGame!.result).toBe(0);
-    });
-
-    it('updates the kind field', () => {
-      const t = new Tournament({
-        pairingSystem: mockPairingSystem,
-        players,
-        rounds: 3,
-      });
-      const r1 = t.pairRound();
-      for (const p of r1.pairings) {
-        t.recordResult({ black: p.black, result: 1, white: p.white });
-      }
-      const first = r1.pairings[0]!;
-      t.updateResult(1, {
-        black: first.black,
-        kind: 'forfeit-win',
-        result: 1,
-        white: first.white,
-      });
-      const updatedGame = t.games[0]!.find(
-        (g) => g.white === first.white && g.black === first.black,
-      );
-      expect(updatedGame!.kind).toBe('forfeit-win');
-    });
-
-    it('throws RangeError for round 0', () => {
-      const t = new Tournament({
-        pairingSystem: mockPairingSystem,
-        players,
-        rounds: 3,
-      });
-      t.pairRound();
-      t.recordResult({ black: 'b', result: 1, white: 'a' });
-      expect(() =>
-        t.updateResult(0, { black: 'b', result: 0.5, white: 'a' }),
-      ).toThrow(RangeError);
-    });
-
-    it('throws RangeError for round beyond currentRound', () => {
-      const t = new Tournament({
-        pairingSystem: mockPairingSystem,
-        players,
-        rounds: 3,
-      });
-      t.pairRound();
-      t.recordResult({ black: 'b', result: 1, white: 'a' });
-      expect(() =>
-        t.updateResult(2, { black: 'b', result: 0.5, white: 'a' }),
-      ).toThrow(RangeError);
-    });
-
-    it('throws RangeError when no result exists for the pairing', () => {
-      const t = new Tournament({
-        pairingSystem: mockPairingSystem,
-        players,
-        rounds: 3,
-      });
-      const r1 = t.pairRound();
-      // Only record one of two pairings
-      const first = r1.pairings[0]!;
-      t.recordResult({ black: first.black, result: 1, white: first.white });
-      // Try to update the unrecorded pairing
-      const second = r1.pairings[1]!;
-      expect(() =>
-        t.updateResult(1, {
-          black: second.black,
-          result: 0.5,
-          white: second.white,
-        }),
-      ).toThrow(RangeError);
-    });
-
-    it('standings reflect the updated result', () => {
-      const t = new Tournament({
-        pairingSystem: mockPairingSystem,
-        players: [{ id: 'a' }, { id: 'b' }],
-        rounds: 1,
-      });
-      t.pairRound();
-      t.recordResult({ black: 'b', result: 1, white: 'a' }); // a wins
-      expect(t.standings().find((s) => s.player === 'a')!.score).toBe(1);
-
-      t.updateResult(1, { black: 'b', result: 0, white: 'a' }); // change to b wins
-      expect(t.standings().find((s) => s.player === 'a')!.score).toBe(0);
-      expect(t.standings().find((s) => s.player === 'b')!.score).toBe(1);
-    });
-
-    it('serialization round-trip preserves updated results', () => {
-      const t = new Tournament({
-        pairingSystem: mockPairingSystem,
-        players,
-        rounds: 2,
-      });
-      const r1 = t.pairRound();
-      for (const p of r1.pairings) {
-        t.recordResult({ black: p.black, result: 1, white: p.white });
-      }
-      const first = r1.pairings[0]!;
-      t.updateResult(1, { black: first.black, result: 0, white: first.white });
-
-      const snap = t.toJSON();
-      const restored = Tournament.fromJSON(snap, mockPairingSystem);
-      const restoredGame = restored.games[0]!.find(
-        (g) => g.white === first.white && g.black === first.black,
-      );
-      expect(restoredGame!.result).toBe(0);
-    });
-  });
-
-  describe('clearResult()', () => {
-    it('removes a result from the current round', () => {
-      const t = new Tournament({
-        pairingSystem: mockPairingSystem,
-        players,
-        rounds: 3,
-      });
-      const r1 = t.pairRound();
-      for (const p of r1.pairings) {
-        t.recordResult({ black: p.black, result: 1, white: p.white });
-      }
-      expect(t.games[0]).toHaveLength(2);
-      const first = r1.pairings[0]!;
-      t.clearResult(1, first.white, first.black);
-      expect(t.games[0]).toHaveLength(1);
-    });
-
-    it('removes a result from a past round', () => {
-      const t = new Tournament({
-        pairingSystem: mockPairingSystem,
-        players,
-        rounds: 3,
-      });
-      const r1 = t.pairRound();
-      for (const p of r1.pairings) {
-        t.recordResult({ black: p.black, result: 1, white: p.white });
-      }
-      const r2 = t.pairRound();
-      for (const p of r2.pairings) {
-        t.recordResult({ black: p.black, result: 1, white: p.white });
-      }
-      expect(t.games[0]).toHaveLength(2);
-      const first = r1.pairings[0]!;
-      t.clearResult(1, first.white, first.black);
-      expect(t.games[0]).toHaveLength(1);
-    });
-
-    it('finds the game when white/black are swapped in input', () => {
-      const t = new Tournament({
-        pairingSystem: mockPairingSystem,
-        players,
-        rounds: 3,
-      });
-      const r1 = t.pairRound();
-      for (const p of r1.pairings) {
-        t.recordResult({ black: p.black, result: 1, white: p.white });
-      }
-      const first = r1.pairings[0]!;
-      // Pass black as white and vice versa — should still find the game
-      t.clearResult(1, first.black, first.white);
-      expect(t.games[0]).toHaveLength(1);
-    });
-
-    it('throws RangeError for round 0', () => {
-      const t = new Tournament({
-        pairingSystem: mockPairingSystem,
-        players,
-        rounds: 3,
-      });
-      t.pairRound();
-      t.recordResult({ black: 'b', result: 1, white: 'a' });
-      expect(() => t.clearResult(0, 'a', 'b')).toThrow(RangeError);
-    });
-
-    it('throws RangeError for round beyond currentRound', () => {
-      const t = new Tournament({
-        pairingSystem: mockPairingSystem,
-        players,
-        rounds: 3,
-      });
-      t.pairRound();
-      t.recordResult({ black: 'b', result: 1, white: 'a' });
-      expect(() => t.clearResult(2, 'a', 'b')).toThrow(RangeError);
-    });
-
-    it('throws RangeError when no result exists for the pairing', () => {
-      const t = new Tournament({
-        pairingSystem: mockPairingSystem,
-        players,
-        rounds: 3,
-      });
-      const r1 = t.pairRound();
-      const first = r1.pairings[0]!;
-      t.recordResult({ black: first.black, result: 1, white: first.white });
-      // Try to clear the unrecorded second pairing
-      const second = r1.pairings[1]!;
-      expect(() => t.clearResult(1, second.white, second.black)).toThrow(
-        RangeError,
-      );
-    });
-
-    it('allows re-recording a cleared result via recordResult', () => {
-      const t = new Tournament({
-        pairingSystem: mockPairingSystem,
-        players: [{ id: 'a' }, { id: 'b' }],
-        rounds: 1,
-      });
-      t.pairRound();
-      t.recordResult({ black: 'b', result: 1, white: 'a' });
-      t.clearResult(1, 'a', 'b');
-      expect(t.games[0]).toHaveLength(0);
-      // Re-record with a different result
-      t.recordResult({ black: 'b', result: 0, white: 'a' });
-      expect(t.games[0]).toHaveLength(1);
-      expect(t.games[0]![0]!.result).toBe(0);
-    });
-
-    it('standings reflect the cleared result', () => {
-      const t = new Tournament({
-        pairingSystem: mockPairingSystem,
-        players: [{ id: 'a' }, { id: 'b' }],
-        rounds: 1,
-      });
-      t.pairRound();
-      t.recordResult({ black: 'b', result: 1, white: 'a' }); // a wins
-      expect(t.standings().find((s) => s.player === 'a')!.score).toBe(1);
-
-      t.clearResult(1, 'a', 'b');
-      // After clearing, both players should have 0 score
-      expect(t.standings().find((s) => s.player === 'a')!.score).toBe(0);
-      expect(t.standings().find((s) => s.player === 'b')!.score).toBe(0);
-    });
-
-    it('serialization round-trip preserves cleared state', () => {
-      const t = new Tournament({
-        pairingSystem: mockPairingSystem,
-        players,
-        rounds: 2,
-      });
-      const r1 = t.pairRound();
-      for (const p of r1.pairings) {
-        t.recordResult({ black: p.black, result: 1, white: p.white });
-      }
-      const first = r1.pairings[0]!;
-      t.clearResult(1, first.white, first.black);
-
-      const snap = t.toJSON();
-      const restored = Tournament.fromJSON(snap, mockPairingSystem);
-      expect(restored.games[0]).toHaveLength(1);
-    });
-  });
-
-  describe('GameKind validation', () => {
-    it('accepts forfeit-win with result 1', () => {
-      const t = new Tournament({
-        pairingSystem: mockPairingSystem,
-        players,
-        rounds: 1,
-      });
-      t.pairRound();
-      expect(() =>
-        t.recordResult({
-          black: 'b',
-          kind: 'forfeit-win',
-          result: 1,
-          white: 'a',
-        }),
-      ).not.toThrow();
-    });
-
-    it('throws for forfeit-win with result 0', () => {
-      const t = new Tournament({
-        pairingSystem: mockPairingSystem,
-        players,
-        rounds: 1,
-      });
-      t.pairRound();
-      expect(() =>
-        t.recordResult({
-          black: 'b',
-          kind: 'forfeit-win',
-          result: 0,
-          white: 'a',
-        }),
-      ).toThrow(RangeError);
-    });
-
-    it('throws for forfeit-loss with result 1', () => {
-      const t = new Tournament({
-        pairingSystem: mockPairingSystem,
-        players,
-        rounds: 1,
-      });
-      t.pairRound();
-      expect(() =>
-        t.recordResult({
-          black: 'b',
-          kind: 'forfeit-loss',
-          result: 1,
-          white: 'a',
-        }),
-      ).toThrow(RangeError);
-    });
-
-    it('accepts forfeit-loss with result 0', () => {
-      const t = new Tournament({
-        pairingSystem: mockPairingSystem,
-        players,
-        rounds: 1,
-      });
-      t.pairRound();
-      expect(() =>
-        t.recordResult({
-          black: 'b',
-          kind: 'forfeit-loss',
-          result: 0,
-          white: 'a',
-        }),
-      ).not.toThrow();
-    });
-
-    it('accepts half-bye with result 0.5', () => {
-      const t = new Tournament({
-        pairingSystem: mockPairingSystem,
-        players,
-        rounds: 1,
-      });
-      t.pairRound();
-      expect(() =>
-        t.recordResult({
-          black: 'b',
-          kind: 'half-bye',
-          result: 0.5,
-          white: 'a',
-        }),
-      ).not.toThrow();
-    });
-
-    it('throws for half-bye with result 1', () => {
-      const t = new Tournament({
-        pairingSystem: mockPairingSystem,
-        players,
-        rounds: 1,
-      });
-      t.pairRound();
-      expect(() =>
-        t.recordResult({
-          black: 'b',
-          kind: 'half-bye',
-          result: 1,
-          white: 'a',
-        }),
-      ).toThrow(RangeError);
-    });
-
-    it('throws for pairing-bye with result 0', () => {
-      const t = new Tournament({
-        pairingSystem: mockPairingSystem,
-        players,
-        rounds: 1,
-      });
-      t.pairRound();
-      expect(() =>
-        t.recordResult({
-          black: 'b',
-          kind: 'pairing-bye',
-          result: 0,
-          white: 'a',
-        }),
-      ).toThrow(RangeError);
-    });
-
-    it('throws for zero-bye with result 1', () => {
-      const t = new Tournament({
-        pairingSystem: mockPairingSystem,
-        players,
-        rounds: 1,
-      });
-      t.pairRound();
-      expect(() =>
-        t.recordResult({
-          black: 'b',
-          kind: 'zero-bye',
-          result: 1,
-          white: 'a',
-        }),
-      ).toThrow(RangeError);
-    });
-
-    it('throws for full-bye with result 0.5', () => {
-      const t = new Tournament({
-        pairingSystem: mockPairingSystem,
-        players,
-        rounds: 1,
-      });
-      t.pairRound();
-      expect(() =>
-        t.recordResult({
-          black: 'b',
-          kind: 'full-bye',
-          result: 0.5,
-          white: 'a',
-        }),
-      ).toThrow(RangeError);
-    });
-
-    it('updateResult also validates kind/result consistency', () => {
-      const t = new Tournament({
-        pairingSystem: mockPairingSystem,
-        players,
-        rounds: 1,
-      });
-      t.pairRound();
-      t.recordResult({ black: 'b', result: 1, white: 'a' });
-      expect(() =>
-        t.updateResult(1, {
-          black: 'b',
-          kind: 'forfeit-win',
-          result: 0,
-          white: 'a',
-        }),
-      ).toThrow(RangeError);
-    });
-
-    it('no validation when kind is omitted', () => {
-      const t = new Tournament({
-        pairingSystem: mockPairingSystem,
-        players,
-        rounds: 1,
-      });
-      t.pairRound();
-      expect(() =>
-        t.recordResult({ black: 'b', result: 0.5, white: 'a' }),
-      ).not.toThrow();
+  describe('FIDE_SCORING', () => {
+    it('exports FIDE default values', () => {
+      expect(FIDE_SCORING.win).toBe(1);
+      expect(FIDE_SCORING.draw).toBe(0.5);
+      expect(FIDE_SCORING.loss).toBe(0);
+      expect(FIDE_SCORING.forfeitWin).toBe(1);
+      expect(FIDE_SCORING.forfeitLoss).toBe(0);
+      expect(FIDE_SCORING.fullPointBye).toBe(1);
+      expect(FIDE_SCORING.halfPointBye).toBe(0.5);
+      expect(FIDE_SCORING.pairingAllocatedBye).toBe(1);
+      expect(FIDE_SCORING.zeroPointBye).toBe(0);
+      expect(FIDE_SCORING.absence).toBe(0);
     });
   });
 
   describe('full lifecycle', () => {
-    it('completes a 1-round tournament and reports isComplete', () => {
-      const t = new Tournament({
+    it('completes a 1-round tournament', () => {
+      const t = new Tournament(makeData({ totalRounds: 1 }), {
         pairingSystem: mockPairingSystem,
-        players,
-        rounds: 1,
       });
-
-      expect(t.isComplete).toBe(false);
-
-      const r1 = t.pairRound();
-      expect(t.currentRound).toBe(1);
-      expect(t.isComplete).toBe(false);
-
-      for (const p of r1.pairings) {
-        t.recordResult({ black: p.black, result: 1, white: p.white });
-      }
-
-      expect(t.isComplete).toBe(true);
+      pairAndRecordRound(t);
+      const json = t.toJSON();
+      expect(json.completedRounds).toHaveLength(1);
+      expect(json.currentRound).toBeUndefined();
     });
 
-    it('completes a 2-round tournament pair→record→pair→record→isComplete', () => {
-      const t = new Tournament({
+    it('completes a 2-round tournament pair-record-pair-record', () => {
+      const t = new Tournament(makeData({ totalRounds: 2 }), {
         pairingSystem: mockPairingSystem,
-        players,
-        rounds: 2,
       });
+      pairAndRecordRound(t);
+      pairAndRecordRound(t);
 
-      const r1 = t.pairRound();
-      for (const p of r1.pairings) {
-        t.recordResult({ black: p.black, result: 1, white: p.white });
-      }
-      expect(t.isComplete).toBe(false);
+      const json = t.toJSON();
+      expect(json.completedRounds).toHaveLength(2);
+      expect(json.currentRound).toBeUndefined();
 
-      const r2 = t.pairRound();
-      for (const p of r2.pairings) {
-        t.recordResult({ black: p.black, result: 1, white: p.white });
-      }
+      const s = t.standings();
+      expect(s).toHaveLength(4);
+      // 2 rounds x 2 games x 1 point per game = 4 total points
+      const totalScore = s.reduce((sum, entry) => sum + entry.score, 0);
+      expect(totalScore).toBe(4);
+    });
 
-      expect(t.currentRound).toBe(2);
-      expect(t.isComplete).toBe(true);
+    it('supports late entry mid-tournament', () => {
+      const t = new Tournament(makeData({ totalRounds: 3 }), {
+        pairingSystem: mockPairingSystem,
+      });
+      pairAndRecordRound(t);
+      t.enter({ id: 'e', points: 0, rank: 5 });
+      // Should be able to pair with 5 players now
+      const r2 = t.pair();
+      expect(r2.games.length + r2.byes.length).toBeGreaterThanOrEqual(3);
+    });
+
+    it('supports withdrawal mid-tournament', () => {
+      const t = new Tournament(
+        makeData({
+          players: [
+            { id: 'a', points: 0, rank: 1 },
+            { id: 'b', points: 0, rank: 2 },
+            { id: 'c', points: 0, rank: 3 },
+            { id: 'd', points: 0, rank: 4 },
+            { id: 'e', points: 0, rank: 5 },
+            { id: 'f', points: 0, rank: 6 },
+          ],
+          totalRounds: 3,
+        }),
+        { pairingSystem: mockPairingSystem },
+      );
+      pairAndRecordRound(t);
+      t.withdraw('f');
+      const json = t.toJSON();
+      expect(json.players).toHaveLength(5);
     });
   });
 });

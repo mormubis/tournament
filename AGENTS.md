@@ -91,28 +91,8 @@ pnpm lint && pnpm test && pnpm build
 
 ## Types
 
-The `Game` type carries an optional `kind?: GameKind` field to classify unplayed
-rounds:
-
-```typescript
-type GameKind =
-  | 'forfeit-loss'
-  | 'forfeit-win'
-  | 'full-bye'
-  | 'half-bye'
-  | 'pairing-bye'
-  | 'zero-bye';
-
-interface Game {
-  black: string;
-  kind?: GameKind;
-  result: Result;
-  white: string;
-}
-```
-
-`Pairing` and `Bye` use `black`/`white`/`player` (plain string ids, not nested
-objects):
+`Game` is a discriminated union extending `Pairing`. Forfeits and byes are
+separate concerns:
 
 ```typescript
 interface Pairing {
@@ -120,10 +100,56 @@ interface Pairing {
   white: string;
 }
 
+type Game = Pairing &
+  (
+    | { forfeit?: never; rated?: boolean; result: 'white' | 'black' | 'draw' }
+    | { forfeit: 'black'; rated?: never; result: 'white' }
+    | { forfeit: 'white'; rated?: never; result: 'black' }
+    | { forfeit: 'both'; rated?: never; result: 'none' }
+  );
+
 interface Bye {
+  kind: 'full' | 'half' | 'pairing' | 'zero';
   player: string;
 }
 ```
+
+`Player` has required `id`, `points`, and `rank`. Optional FIDE metadata:
+
+```typescript
+interface Player {
+  birthDate?: string;
+  federation?: string;
+  fideId?: string;
+  id: string;
+  name?: string;
+  nationalRatings?: NationalRating[];
+  points: number;
+  rank: number;
+  rating?: number;
+  sex?: 'm' | 'w';
+  startingRank?: number;
+  title?: 'CM' | 'FM' | 'GM' | 'IM' | 'WCM' | 'WFM' | 'WGM' | 'WIM';
+}
+```
+
+Rounds evolve: `Pairings` → `Round` → `CompletedRound`:
+
+```typescript
+interface Pairings {
+  byes: Bye[];
+  games: Pairing[];
+}
+interface Round extends Pairings {
+  games: (Pairing | Game)[];
+}
+interface CompletedRound extends Pairings {
+  games: Game[];
+}
+```
+
+`TournamentData` is the serializable plain data interface. `Tournament` is the
+class that wraps it.
 
 `Standing` uses `player` (not `playerId`):
 
@@ -136,26 +162,18 @@ interface Standing {
 }
 ```
 
-## Unified Pairing Interface
-
-All pairing systems consumed by `Tournament` must conform to:
+## Pairing System Signature
 
 ```typescript
-type PairingSystem = (
-  players: Standing[],
-  games: Game[][],
-  options?: object,
-) => { pairings: Pairing[]; byes: Bye[] };
+type PairingSystem = (players: Player[], rounds: CompletedRound[]) => Pairings;
 ```
 
 ## Tiebreak Signature
 
-Tiebreak functions have this signature:
-
 ```typescript
 type Tiebreak = (
-  playerId: string,
-  games: Game[][],
+  player: string,
+  rounds: CompletedRound[],
   players: Player[],
 ) => number;
 ```
@@ -167,9 +185,9 @@ Pass an ordered array of tiebreak functions to
 
 ## Validation
 
-- `RangeError` for: fewer than 2 players, fewer than 1 round, pairing a
-  completed tournament, recording a result for a non-existent pairing, pairing
-  when current round is incomplete.
+- `RangeError` for: pairing a completed tournament, recording a result for a
+  non-existent pairing, pairing when current round is incomplete, entering a
+  duplicate player, withdrawing a non-existent player.
 
 ---
 
