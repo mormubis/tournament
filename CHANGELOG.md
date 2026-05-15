@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.1.1] - 2026-05-15
+
+### Fixed
+
+- `pair()` now calls `onWarning` when a full-point bye is assigned, flagging it
+  as deprecated per FIDE rules (VCL.17)
+
 ## [3.1.0] - 2026-05-09
 
 ### Added
