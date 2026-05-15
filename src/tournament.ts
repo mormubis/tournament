@@ -481,6 +481,11 @@ class Tournament {
 
     const scoring = this.#data.scoringSystem ?? FIDE_SCORING;
     for (const bye of result.byes) {
+      if (bye.kind === 'full' && this.#onWarning) {
+        this.#onWarning(
+          `full-point bye for "${bye.player}" is deprecated by FIDE. use half-point or pairing-allocated byes instead.`,
+        );
+      }
       const player = this.#findPlayer(bye.player);
       if (player) {
         player.points += scoreForBye(bye, scoring);

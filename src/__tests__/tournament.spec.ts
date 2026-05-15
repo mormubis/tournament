@@ -69,6 +69,18 @@ const byePairingSystem: PairingSystem = (ps): Pairings => {
   return { byes, games };
 };
 
+const fullByePairingSystem: PairingSystem = (ps): Pairings => {
+  const games: Pairing[] = [];
+  const byes: Bye[] = [];
+  for (let index = 0; index < ps.length - 1; index += 2) {
+    games.push({ black: ps[index + 1]!.id, white: ps[index]!.id });
+  }
+  if (ps.length % 2 !== 0) {
+    byes.push({ kind: 'full', player: ps.at(-1)!.id });
+  }
+  return { byes, games };
+};
+
 /** Helper: pair a round, record all results as white wins, return the tournament. */
 function pairAndRecordRound(t: Tournament): Pairings {
   const pairings = t.pair();
@@ -184,6 +196,28 @@ describe('Tournament', () => {
       t.pair();
       const c = t.players.find((p) => p.id === 'c')!;
       expect(c.points).toBe(0.5); // half-bye from byePairingSystem
+    });
+
+    it('calls onWarning for full-point byes (FIDE deprecated)', () => {
+      const warnings: string[] = [];
+      const t = new Tournament(
+        makeData({
+          players: [
+            { id: 'a', points: 0, rank: 1 },
+            { id: 'b', points: 0, rank: 2 },
+            { id: 'c', points: 0, rank: 3 },
+          ],
+          totalRounds: 1,
+        }),
+        {
+          onWarning: (message) => warnings.push(message),
+          pairingSystem: fullByePairingSystem,
+        },
+      );
+      t.pair();
+      expect(warnings).toHaveLength(1);
+      expect(warnings[0]).toContain('full-point bye');
+      expect(warnings[0]).toContain('deprecated');
     });
   });
 
