@@ -1,5 +1,17 @@
 # Changelog
 
+## [3.2.0] - 2026-05-25
+
+### Added
+
+- `withdrawnPlayers?: string[]` on `TournamentData` — tracks players who left
+  the tournament, survives `toJSON()` roundtrips
+- `startingRankMethod?: string` on `TournamentMetadata` — records how the
+  initial ranking list was determined
+- `Tournament` constructor now respects `withdrawnPlayers` from input data
+  (excludes them from pairing)
+- `withdraw()` persists the player ID to `TournamentData.withdrawnPlayers`
+
 ## [3.1.1] - 2026-05-15
 
 ### Fixed
