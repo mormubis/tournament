@@ -163,7 +163,7 @@ class Tournament {
     this.#onWarning = options.onWarning;
     this.#pairingSystem = options.pairingSystem;
 
-    this.#withdrawn = new Set<string>();
+    this.#withdrawn = new Set<string>(data.withdrawnPlayers);
 
     // Resolve tiebreak IDs to functions
     const tiebreakIds = data.tiebreaks ?? [];
@@ -608,6 +608,8 @@ class Tournament {
    * `JSON.stringify`.
    */
   toJSON(): TournamentData {
+    const withdrawn =
+      this.#withdrawn.size > 0 ? [...this.#withdrawn].toSorted() : undefined;
     return {
       ...this.#data,
       completedRounds: this.#completedRounds.map((r) => ({
@@ -621,6 +623,7 @@ class Tournament {
         },
       }),
       players: [...this.#data.players],
+      ...(withdrawn && { withdrawnPlayers: withdrawn }),
     };
   }
 
@@ -633,6 +636,7 @@ class Tournament {
       throw new RangeError(`player ${playerId} not found`);
     }
     this.#withdrawn.add(playerId);
+    this.#data.withdrawnPlayers = [...this.#withdrawn].toSorted();
   }
 }
 
