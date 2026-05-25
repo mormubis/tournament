@@ -176,6 +176,7 @@ interface TournamentMetadata {
   pairingController?: string;
   roundDates?: string[];
   startDate?: string;
+  startingRankMethod?: string;
   timeControl?: string;
   tournamentType?: string;
 }
@@ -197,6 +198,7 @@ interface TournamentData {
   teams?: Team[];
   tiebreaks?: string[];
   totalRounds: number;
+  withdrawnPlayers?: string[];
 }
 
 /**

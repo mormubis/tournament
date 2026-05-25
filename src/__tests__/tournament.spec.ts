@@ -713,6 +713,47 @@ describe('Tournament', () => {
       });
       expect(() => t.withdraw('z')).toThrow(RangeError);
     });
+
+    it('persists withdrawnPlayers in toJSON()', () => {
+      const t = new Tournament(
+        makeData({
+          players: [
+            { id: 'a', points: 0, rank: 1 },
+            { id: 'b', points: 0, rank: 2 },
+            { id: 'c', points: 0, rank: 3 },
+            { id: 'd', points: 0, rank: 4 },
+          ],
+          totalRounds: 3,
+        }),
+        { pairingSystem: mockPairingSystem },
+      );
+      t.withdraw('d');
+      const json = t.toJSON();
+      expect(json.withdrawnPlayers).toEqual(['d']);
+    });
+
+    it('restores withdrawnPlayers from data', () => {
+      const t = new Tournament(
+        makeData({
+          players: [
+            { id: 'a', points: 0, rank: 1 },
+            { id: 'b', points: 0, rank: 2 },
+            { id: 'c', points: 0, rank: 3 },
+            { id: 'd', points: 0, rank: 4 },
+          ],
+          totalRounds: 3,
+          withdrawnPlayers: ['d'],
+        }),
+        { pairingSystem: mockPairingSystem },
+      );
+      // 'd' should be excluded from pairing
+      const r1 = t.pair();
+      const pairedIds = [
+        ...r1.games.flatMap((g) => [g.white, g.black]),
+        ...r1.byes.map((b) => b.player),
+      ];
+      expect(pairedIds).not.toContain('d');
+    });
   });
 
   describe('adjust()', () => {
