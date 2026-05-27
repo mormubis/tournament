@@ -6,6 +6,7 @@ import type {
   CompletedRound,
   Game,
   Pairing,
+  PairingOptions,
   PairingSystem,
   Pairings,
   Player,
@@ -16,6 +17,7 @@ import type {
   Tiebreak,
   TournamentData,
   TournamentMetadata,
+  TraceCallback,
 } from './types.js';
 
 /** Hardcoded FIDE defaults for scoring fallback chains. */
@@ -132,6 +134,7 @@ class Tournament {
   #completedRounds: CompletedRound[];
   #currentRound?: Round;
   #data: TournamentData;
+  readonly #onTrace?: TraceCallback;
   readonly #onWarning?: (message: string) => void;
   readonly #pairingSystem: PairingSystem;
   readonly #tiebreakFns: Tiebreak[];
@@ -147,6 +150,7 @@ class Tournament {
     data: TournamentData,
     options: {
       acceleration?: AccelerationMethod;
+      onTrace?: TraceCallback;
       onWarning?: (message: string) => void;
       pairingSystem: PairingSystem;
       tiebreaks?: Record<string, Tiebreak>;
@@ -160,6 +164,7 @@ class Tournament {
       ? { ...data.currentRound, games: [...data.currentRound.games] }
       : undefined;
     this.#data = { ...data };
+    this.#onTrace = options.onTrace;
     this.#onWarning = options.onWarning;
     this.#pairingSystem = options.pairingSystem;
 
@@ -472,7 +477,15 @@ class Tournament {
     const activePlayers = this.#data.players.filter(
       (p) => !this.#withdrawn.has(p.id),
     );
-    const result = this.#pairingSystem(activePlayers, this.#completedRounds);
+    const pairingOptions: PairingOptions = {
+      expectedRounds: this.#data.totalRounds,
+      ...(this.#onTrace && { trace: this.#onTrace }),
+    };
+    const result = this.#pairingSystem(
+      activePlayers,
+      this.#completedRounds,
+      pairingOptions,
+    );
 
     this.#currentRound = {
       byes: result.byes,

@@ -1,5 +1,20 @@
 # Changelog
 
+## [3.3.0] - 2026-05-27
+
+### Added
+
+- `PairingOptions` interface with `trace` and `expectedRounds` fields.
+- `TraceCallback` type for pairing algorithm observability.
+- `onTrace` option in `Tournament` constructor — forwarded to the pairing system
+  on each `pair()` call.
+- `expectedRounds` is now automatically forwarded from `totalRounds` to the
+  pairing system.
+
+### Changed
+
+- `PairingSystem` type now accepts an optional third `PairingOptions` parameter.
+
 ## [3.2.0] - 2026-05-25
 
 ### Added
