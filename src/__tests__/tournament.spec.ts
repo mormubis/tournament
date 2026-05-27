@@ -69,6 +69,24 @@ const byePairingSystem: PairingSystem = (ps): Pairings => {
   return { byes, games };
 };
 
+const tracingPairingSystem: PairingSystem = (
+  players,
+  _rounds,
+  options,
+): Pairings => {
+  if (options?.trace) {
+    options.trace({ playerCount: players.length, type: 'test:event' });
+  }
+  const games: Pairing[] = [];
+  for (let index = 0; index < players.length - 1; index += 2) {
+    games.push({
+      black: players[index + 1]!.id,
+      white: players[index]!.id,
+    });
+  }
+  return { byes: [], games };
+};
+
 const fullByePairingSystem: PairingSystem = (ps): Pairings => {
   const games: Pairing[] = [];
   const byes: Bye[] = [];
@@ -963,6 +981,76 @@ describe('Tournament', () => {
       expect(FIDE_SCORING.pairingAllocatedBye).toBe(1);
       expect(FIDE_SCORING.zeroPointBye).toBe(0);
       expect(FIDE_SCORING.absence).toBe(0);
+    });
+  });
+
+  describe('trace', () => {
+    it('forwards onTrace to the pairing system', () => {
+      const events: Record<string, unknown>[] = [];
+
+      const t = new Tournament(makeData(), {
+        onTrace: (event) => events.push(event),
+        pairingSystem: tracingPairingSystem,
+      });
+      t.pair();
+
+      expect(events).toHaveLength(1);
+      expect(events[0]).toStrictEqual({
+        playerCount: 4,
+        type: 'test:event',
+      });
+    });
+
+    it('forwards expectedRounds from totalRounds', () => {
+      let received: number | undefined;
+      const inspectingSystem: PairingSystem = (
+        players,
+        _rounds,
+        options,
+      ): Pairings => {
+        received = options?.expectedRounds;
+        const games: Pairing[] = [];
+        for (let index = 0; index < players.length - 1; index += 2) {
+          games.push({
+            black: players[index + 1]!.id,
+            white: players[index]!.id,
+          });
+        }
+        return { byes: [], games };
+      };
+
+      const t = new Tournament(makeData({ totalRounds: 7 }), {
+        pairingSystem: inspectingSystem,
+      });
+      t.pair();
+
+      expect(received).toBe(7);
+    });
+
+    it('does not include trace key when onTrace is not provided', () => {
+      let receivedOptions: unknown;
+      const inspectingSystem: PairingSystem = (
+        players,
+        _rounds,
+        options,
+      ): Pairings => {
+        receivedOptions = options;
+        const games: Pairing[] = [];
+        for (let index = 0; index < players.length - 1; index += 2) {
+          games.push({
+            black: players[index + 1]!.id,
+            white: players[index]!.id,
+          });
+        }
+        return { byes: [], games };
+      };
+
+      const t = new Tournament(makeData(), {
+        pairingSystem: inspectingSystem,
+      });
+      t.pair();
+
+      expect(receivedOptions).toStrictEqual({ expectedRounds: 3 });
     });
   });
 

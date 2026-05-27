@@ -62,6 +62,16 @@ interface Pairing {
   white: string;
 }
 
+/**
+ * Options forwarded to the pairing system on each `pair()` call.
+ */
+interface PairingOptions {
+  /** Total expected rounds in the tournament. Affects last-round compatibility checks. */
+  expectedRounds?: number;
+  /** Structured trace callback for pairing algorithm observability. */
+  trace?: TraceCallback;
+}
+
 /** The output of a pairing system for a single round. */
 interface Pairings {
   /** Players who receive a bye this round. */
@@ -205,7 +215,18 @@ interface TournamentData {
  * A function that generates pairings for a round given the player list and
  * completed rounds.
  */
-type PairingSystem = (players: Player[], rounds: CompletedRound[]) => Pairings;
+type PairingSystem = (
+  players: Player[],
+  rounds: CompletedRound[],
+  options?: PairingOptions,
+) => Pairings;
+
+/**
+ * Callback for pairing algorithm trace events. The event shape is defined by
+ * each pairing system — tournament forwards the callback without inspecting
+ * the events.
+ */
+type TraceCallback = (event: Record<string, unknown>) => void;
 
 /**
  * A tiebreak function that computes a numeric value for a player based on the
@@ -230,6 +251,7 @@ export type {
   Game,
   NationalRating,
   Pairing,
+  PairingOptions,
   PairingSystem,
   Pairings,
   Player,
@@ -243,4 +265,5 @@ export type {
   Tiebreak,
   TournamentData,
   TournamentMetadata,
+  TraceCallback,
 };

@@ -9,6 +9,7 @@ export type {
   Game,
   NationalRating,
   Pairing,
+  PairingOptions,
   PairingSystem,
   Pairings,
   Player,
@@ -22,4 +23,5 @@ export type {
   Tiebreak,
   TournamentData,
   TournamentMetadata,
+  TraceCallback,
 } from './types.js';
